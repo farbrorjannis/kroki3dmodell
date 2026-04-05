@@ -471,6 +471,16 @@ function loadModel(key) {
   loader.load(url,
     (gltf) => {
       const model = gltf.scene;
+      const model = gltf.scene;
+
+// --- FIX FÖR ROTATION ---
+// Mixamo-modeller hamnar ofta på rygg. Denna rad tvingar den att stå upp:
+model.rotation.x = 0; 
+// Om den fortfarande ligger ner efter detta, testa: model.rotation.x = -Math.PI / 2;
+
+// --- FIX FÖR POSITION ---
+// Detta ser till att gubben inte svävar utan står på "golvet"
+model.position.y = 0;
 
       // Collect bones FIRST, before any transformations
       model.traverse(child => {
