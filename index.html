@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>3D Mannequin – Konstlabbet</title>
+<title>3D Mannequin – Art Lab</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -19,7 +19,7 @@ body{display:flex;flex-direction:column;}
 .btn.active{background:var(--ochre);color:var(--dark);}
 #main{flex:1;position:relative;background:#000;}
 #viewport{width:100%;height:100%;cursor:grab;}
-#loading{position:absolute;inset:0;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;}
+#loading{position:absolute;inset:0;background:rgba(0,0,0,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;}
 #loading.hidden{display:none;}
 .spinner{width:40px;height:40px;border:3px solid #333;border-top-color:var(--ochre);border-radius:50%;animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -47,8 +47,8 @@ body{display:flex;flex-direction:column;}
 
 <div id="main">
   <canvas id="viewport"></canvas>
-  <div id="loading"><div class="spinner"></div><p style="margin-top:10px; font-size:12px;">Ställer upp modellen...</p></div>
-  <div id="hint">Vänsterklick: Rotera | Scroll: Zoom | Högerklick: Panorera</div>
+  <div id="loading"><div class="spinner"></div><p style="margin-top:10px; font-size:12px;">Calibrating model...</p></div>
+  <div id="hint">Left Click: Rotate | Scroll: Zoom | Right Click: Pan</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -61,16 +61,16 @@ const MODELS = {
 
 const B = { 
   hips:'mixamorigHips', spine:'mixamorigSpine', neck:'mixamorigNeck', 
-  lArm:'mixamorigLeftArm', rArm:'mixamorigLeftArm', 
+  lArm:'mixamorigLeftArm', rArm:'mixamorigRightArm', 
   lUpLeg:'mixamorigLeftUpLeg', rUpLeg:'mixamorigRightUpLeg', 
   lLeg:'mixamorigLeftLeg', rLeg:'mixamorigRightLeg' 
 };
 
 const POSES = { 
   'T-Pose': {}, 
-  'Stående': {[B.lArm]:{z:-1.2}, [B.rArm]:{z:1.2}}, 
-  'Sittande': {[B.lUpLeg]:{x:-1.5}, [B.rUpLeg]:{x:-1.5}, [B.lLeg]:{x:1.5}, [B.rLeg]:{x:1.5}, [B.hips]:{y:-0.5, z:0.2}},
-  'Hukande': {[B.lUpLeg]:{x:-2}, [B.rUpLeg]:{x:-2}, [B.lLeg]:{x:2.2}, [B.rLeg]:{x:2.2}, [B.hips]:{y:-0.8}}
+  'Standing': {[B.lArm]:{z:-1.2}, [B.rArm]:{z:1.2}}, 
+  'Sitting': {[B.lUpLeg]:{x:-1.5}, [B.rUpLeg]:{x:-1.5}, [B.lLeg]:{x:1.5}, [B.rLeg]:{x:1.5}, [B.hips]:{y:-0.5, z:0.2}},
+  'Crouching': {[B.lUpLeg]:{x:-2}, [B.rUpLeg]:{x:-2}, [B.lLeg]:{x:2.2}, [B.rLeg]:{x:2.2}, [B.hips]:{y:-0.8}}
 };
 
 const scene = new THREE.Scene();
@@ -83,21 +83,14 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
 
-const lights = [
-  new THREE.AmbientLight(0xffffff, 0.5),
-  new THREE.DirectionalLight(0xffffff, 0.8),
-  new THREE.PointLight(0xffffff, 0.5)
-];
-lights[1].position.set(2, 4, 3);
-lights[1].castShadow = true;
-lights[2].position.set(-2, 1, 2);
-scene.add(...lights);
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(2, 4, 3); dl.castShadow = true; scene.add(dl);
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0x222222}));
 ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
 const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222); scene.add(grid);
 
-let model, bones = {}, curPose = 'Stående', isWire = false;
+let model, bones = {}, curPose = 'Standing', isWire = false;
 const loader = new THREE.GLTFLoader();
 
 function loadModel(id) {
@@ -108,10 +101,8 @@ function loadModel(id) {
   loader.load(MODELS[id], (gltf) => {
     model = gltf.scene;
 
-    // 1. ÅTERSTÄLL ALLT FÖRST (Viktigt för korrekt mätning)
     model.rotation.set(0,0,0);
-    model.scale.set(1,1,1);
-    model.position.set(0,0,0);
+    model.updateMatrixWorld(true);
 
     model.traverse(n => {
       if(n.isBone) bones[n.name] = n;
@@ -122,20 +113,16 @@ function loadModel(id) {
       }
     });
 
-    // 2. MÄT MODELLEN NÄR DEN LIGGER NER
+    model.rotateX(-Math.PI / 2);
+    model.updateMatrixWorld(true);
+
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
     
-    // 3. SKALA TILL MÄNSKLIG STORLEK (Mixamo är ofta jättestort eller pyttelitet)
-    // Vi kollar vilken axel som är längst (z eller y beroende på filen)
-    const currentHeight = Math.max(size.y, size.z);
-    const scaleFactor = 1.8 / currentHeight; 
-    model.scale.setScalar(scaleFactor);
-
-    // 4. ROTERA UPP
-    model.rotateX(-Math.PI / 2);
-
-    // 5. PLACERA FÖTTERNA PÅ NOLLAN (GOLVET)
+    const s = 1.8 / size.y;
+    model.scale.setScalar(s);
+    
+    model.updateMatrixWorld(true);
     const finalBox = new THREE.Box3().setFromObject(model);
     model.position.y = -finalBox.min.y;
 
@@ -165,13 +152,11 @@ function switchModel(id) {
   loadModel(id);
 }
 
-// Skapa knappar
 const pDiv = document.getElementById('poseBtns');
 Object.keys(POSES).forEach(k => {
   const b = document.createElement('button'); b.className='btn pose-btn'; b.innerText=k; b.onclick=()=>applyPose(k); pDiv.appendChild(b);
 });
 
-// Kamera-logik
 let theta=0, phi=0.2, radius=4, drag=false;
 const canvas = document.getElementById('viewport');
 canvas.onmousedown = (e) => { if(e.button===0) drag=true; };
