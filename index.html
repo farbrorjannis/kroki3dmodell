@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="sv">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -13,18 +13,17 @@ body{display:flex;flex-direction:column;}
 #topbar{background:var(--dark);border-bottom:1px solid var(--border);padding:.5rem .9rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;z-index:10;}
 #topbar h1{font-family:'Playfair Display',serif;font-size:.95rem;color:var(--ochre-l);font-weight:500;}
 .sep{width:1px;height:20px;background:var(--border);}
-.model-btns, .pose-btns, .act-btns{display:flex;gap:.3rem;}
-.btn{padding:.3rem .6rem;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--light);font-size:.65rem;font-weight:700;cursor:pointer;text-transform:uppercase;}
+.btn-group{display:flex;gap:.3rem;}
+.btn{padding:.3rem .6rem;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--light);font-size:.65rem;font-weight:700;cursor:pointer;text-transform:uppercase;transition:0.2s;}
 .btn:hover, .btn.active{border-color:var(--ochre);color:var(--ochre);}
 .btn.active{background:var(--ochre);color:var(--dark);}
 #main{flex:1;position:relative;background:#000;}
 #viewport{width:100%;height:100%;cursor:grab;}
-#loading{position:absolute;inset:0;background:rgba(0,0,0,0.8);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;}
+#loading{position:absolute;inset:0;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;}
 #loading.hidden{display:none;}
 .spinner{width:40px;height:40px;border:3px solid #333;border-top-color:var(--ochre);border-radius:50%;animation:spin 1s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
-#light-panel{position:absolute;right:10px;top:10px;background:rgba(20,15,10,0.95);padding:15px;border-radius:8px;border:1px solid var(--border);display:none;font-size:12px;}
-#light-panel.open{display:block;}
+#hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--mid);pointer-events:none;}
 </style>
 </head>
 <body>
@@ -32,16 +31,15 @@ body{display:flex;flex-direction:column;}
 <div id="topbar">
   <h1>3D Mannequin</h1>
   <div class="sep"></div>
-  <div class="model-btns">
-    <button class="btn active" id="btn-xbot" onclick="switchModel('xbot')">♂ X Bot</button>
-    <button class="btn" id="btn-ybot" onclick="switchModel('ybot')">♀ Y Bot</button>
+  <div class="btn-group">
+    <button class="btn active" id="m-xbot" onclick="switchModel('xbot')">♂ X Bot</button>
+    <button class="btn" id="m-ybot" onclick="switchModel('ybot')">♀ Y Bot</button>
   </div>
   <div class="sep"></div>
-  <div class="pose-btns" id="poseBtns"></div>
+  <div class="btn-group" id="poseBtns"></div>
   <div class="sep"></div>
-  <div class="act-btns">
-    <button class="btn" onclick="toggleLight()">💡 Light</button>
-    <button class="btn" id="btnWire" onclick="toggleWire()">◻ Wire</button>
+  <div class="btn-group">
+    <button class="btn" onclick="toggleWire()">◻ Wire</button>
     <button class="btn" onclick="toggleBg()">☀ BG</button>
     <button class="btn" onclick="saveSnap()">⬇ Save</button>
   </div>
@@ -49,42 +47,57 @@ body{display:flex;flex-direction:column;}
 
 <div id="main">
   <canvas id="viewport"></canvas>
-  <div id="loading"><div class="spinner"></div><p style="margin-top:10px">Laddar modell...</p></div>
-  <div id="light-panel" id="lp">
-    Key: <input type="range" min="0" max="200" value="100" oninput="setL('k',this.value)"><br>
-    Fill: <input type="range" min="0" max="200" value="50" oninput="setL('f',this.value)">
-  </div>
+  <div id="loading"><div class="spinner"></div><p style="margin-top:10px; font-size:12px;">Ställer upp modellen...</p></div>
+  <div id="hint">Vänsterklick: Rotera | Scroll: Zoom | Högerklick: Panorera</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
-const URLS = { xbot: 'https://farbrorjannis.github.io/kroki3dmodell/xbot.glb', ybot: 'https://farbrorjannis.github.io/kroki3dmodell/ybot.glb' };
-const B = { hips:'mixamorigHips', spine:'mixamorigSpine', neck:'mixamorigNeck', lArm:'mixamorigLeftArm', rArm:'mixamorigRightArm', lUpLeg:'mixamorigLeftUpLeg', rUpLeg:'mixamorigRightUpLeg', lLeg:'mixamorigLeftLeg', rLeg:'mixamorigRightLeg' };
+const MODELS = { 
+  xbot: 'https://farbrorjannis.github.io/kroki3dmodell/xbot.glb', 
+  ybot: 'https://farbrorjannis.github.io/kroki3dmodell/ybot.glb' 
+};
+
+const B = { 
+  hips:'mixamorigHips', spine:'mixamorigSpine', neck:'mixamorigNeck', 
+  lArm:'mixamorigLeftArm', rArm:'mixamorigLeftArm', 
+  lUpLeg:'mixamorigLeftUpLeg', rUpLeg:'mixamorigRightUpLeg', 
+  lLeg:'mixamorigLeftLeg', rLeg:'mixamorigRightLeg' 
+};
+
 const POSES = { 
   'T-Pose': {}, 
-  'Standing': {[B.lArm]:{z:-1.2}, [B.rArm]:{z:1.2}}, 
-  'Sitting': {[B.lUpLeg]:{x:-1.5}, [B.rUpLeg]:{x:-1.5}, [B.lLeg]:{x:1.5}, [B.rLeg]:{x:1.5}, [B.hips]:{y:-0.5}},
-  'Crouch': {[B.lUpLeg]:{x:-2}, [B.rUpLeg]:{x:-2}, [B.lLeg]:{x:2.2}, [B.rLeg]:{x:2.2}, [B.hips]:{y:-0.8}}
+  'Stående': {[B.lArm]:{z:-1.2}, [B.rArm]:{z:1.2}}, 
+  'Sittande': {[B.lUpLeg]:{x:-1.5}, [B.rUpLeg]:{x:-1.5}, [B.lLeg]:{x:1.5}, [B.rLeg]:{x:1.5}, [B.hips]:{y:-0.5, z:0.2}},
+  'Hukande': {[B.lUpLeg]:{x:-2}, [B.rUpLeg]:{x:-2}, [B.lLeg]:{x:2.2}, [B.rLeg]:{x:2.2}, [B.hips]:{y:-0.8}}
 };
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x151008);
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
-camera.position.set(0, 1.5, 5);
+camera.position.set(0, 1.2, 4);
+
 const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('viewport'), antialias:true, preserveDrawingBuffer:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
 
-const keyL = new THREE.DirectionalLight(0xffffff, 1); keyL.position.set(2,4,3); keyL.castShadow=true;
-const fillL = new THREE.DirectionalLight(0xffffff, 0.5); fillL.position.set(-2,1,2);
-scene.add(new THREE.AmbientLight(0xffffff, 0.4), keyL, fillL);
+const lights = [
+  new THREE.AmbientLight(0xffffff, 0.5),
+  new THREE.DirectionalLight(0xffffff, 0.8),
+  new THREE.PointLight(0xffffff, 0.5)
+];
+lights[1].position.set(2, 4, 3);
+lights[1].castShadow = true;
+lights[2].position.set(-2, 1, 2);
+scene.add(...lights);
 
-const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222); scene.add(grid);
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial({color:0x222222}));
 ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(10, 20, 0x444444, 0x222222); scene.add(grid);
 
-let model, bones = {}, curPose = 'Standing', wire = false;
+let model, bones = {}, curPose = 'Stående', isWire = false;
 const loader = new THREE.GLTFLoader();
 
 function loadModel(id) {
@@ -92,10 +105,10 @@ function loadModel(id) {
   if(model) scene.remove(model);
   bones = {};
 
-  loader.load(URLS[id], (gltf) => {
+  loader.load(MODELS[id], (gltf) => {
     model = gltf.scene;
-    
-    // 1. NOLLSTÄLL ALLT FÖRST
+
+    // 1. ÅTERSTÄLL ALLT FÖRST (Viktigt för korrekt mätning)
     model.rotation.set(0,0,0);
     model.scale.set(1,1,1);
     model.position.set(0,0,0);
@@ -105,23 +118,24 @@ function loadModel(id) {
       if(n.isMesh) { 
         n.castShadow = n.receiveShadow = true; 
         n.material.side = THREE.DoubleSide;
-        n.userData.oldMat = n.material;
+        n.userData.origMat = n.material;
       }
     });
 
-    // 2. MÄT MODELLEN NÄR DEN LIGGER NER (GLB-Standard)
+    // 2. MÄT MODELLEN NÄR DEN LIGGER NER
     const box = new THREE.Box3().setFromObject(model);
     const size = box.getSize(new THREE.Vector3());
     
-    // 3. SKALA BASERAT PÅ LÄNGDEN (som är 'z' eller 'y' beroende på export)
-    const height = Math.max(size.y, size.z);
-    const s = 1.8 / height;
-    model.scale.setScalar(s);
+    // 3. SKALA TILL MÄNSKLIG STORLEK (Mixamo är ofta jättestort eller pyttelitet)
+    // Vi kollar vilken axel som är längst (z eller y beroende på filen)
+    const currentHeight = Math.max(size.y, size.z);
+    const scaleFactor = 1.8 / currentHeight; 
+    model.scale.setScalar(scaleFactor);
 
-    // 4. ROTERA UPP DEN
+    // 4. ROTERA UPP
     model.rotateX(-Math.PI / 2);
 
-    // 5. POSITIONERA PÅ MARKEN
+    // 5. PLACERA FÖTTERNA PÅ NOLLAN (GOLVET)
     const finalBox = new THREE.Box3().setFromObject(model);
     model.position.y = -finalBox.min.y;
 
@@ -131,21 +145,23 @@ function loadModel(id) {
   });
 }
 
-function applyPose(n) {
-  curPose = n;
+function applyPose(name) {
+  curPose = name;
   Object.values(bones).forEach(b => b.rotation.set(0,0,0));
-  const p = POSES[n] || {};
-  for(let b in p) if(bones[b]) { 
-    if(p[b].x) bones[b].rotation.x = p[b].x;
-    if(p[b].y) bones[b].rotation.y = p[b].y;
-    if(p[b].z) bones[b].rotation.z = p[b].z;
+  const p = POSES[name] || {};
+  for(let b in p) {
+    if(bones[b]) {
+      if(p[b].x) bones[b].rotation.x = p[b].x;
+      if(p[b].y) bones[b].rotation.y = p[b].y;
+      if(p[b].z) bones[b].rotation.z = p[b].z;
+    }
   }
-  document.querySelectorAll('.pose-btn').forEach(btn => btn.classList.toggle('active', btn.innerText === n));
+  document.querySelectorAll('.pose-btn').forEach(b => b.classList.toggle('active', b.innerText === name));
 }
 
 function switchModel(id) {
-  document.getElementById('btn-xbot').classList.toggle('active', id==='xbot');
-  document.getElementById('btn-ybot').classList.toggle('active', id==='ybot');
+  document.getElementById('m-xbot').classList.toggle('active', id==='xbot');
+  document.getElementById('m-ybot').classList.toggle('active', id==='ybot');
   loadModel(id);
 }
 
@@ -155,22 +171,20 @@ Object.keys(POSES).forEach(k => {
   const b = document.createElement('button'); b.className='btn pose-btn'; b.innerText=k; b.onclick=()=>applyPose(k); pDiv.appendChild(b);
 });
 
-// Kamera-styrning
-let rot=0, phi=0.2, dist=4, drag=false;
-canvas = document.getElementById('viewport');
-canvas.onmousedown = () => drag=true;
+// Kamera-logik
+let theta=0, phi=0.2, radius=4, drag=false;
+const canvas = document.getElementById('viewport');
+canvas.onmousedown = (e) => { if(e.button===0) drag=true; };
 window.onmouseup = () => drag=false;
-window.onmousemove = (e) => { if(drag){ rot -= e.movementX*0.01; phi = Math.max(-0.5, Math.min(1, phi + e.movementY*0.01)); updateCam(); }};
-canvas.onwheel = (e) => { dist = Math.max(1, Math.min(10, dist + e.deltaY*0.005)); updateCam(); };
+window.onmousemove = (e) => { if(drag){ theta -= e.movementX*0.01; phi = Math.max(-0.4, Math.min(1.2, phi + e.movementY*0.01)); updateCam(); }};
+canvas.onwheel = (e) => { radius = Math.max(1, Math.min(10, radius + e.deltaY*0.005)); updateCam(); };
 
 function updateCam() {
-  camera.position.set(dist*Math.sin(rot)*Math.cos(phi), dist*Math.sin(phi)+1, dist*Math.cos(rot)*Math.cos(phi));
+  camera.position.set(radius*Math.sin(theta)*Math.cos(phi), radius*Math.sin(phi)+1, radius*Math.cos(theta)*Math.cos(phi));
   camera.lookAt(0, 1, 0);
 }
 
-function toggleLight() { const p = document.getElementById('light-panel'); p.style.display = p.style.display==='block'?'none':'block'; }
-function setL(t,v) { if(t==='k') keyL.intensity=v/100; else fillL.intensity=v/100; }
-function toggleWire() { wire=!wire; model.traverse(n=>{if(n.isMesh) n.material = wire?new THREE.MeshBasicMaterial({wireframe:true, color:0x00ff00}):n.userData.oldMat;});}
+function toggleWire() { isWire=!isWire; model.traverse(n=>{if(n.isMesh) n.material = isWire?new THREE.MeshBasicMaterial({wireframe:true, color:0x00ff00}):n.userData.origMat;});}
 function toggleBg() { scene.background = scene.background.getHex()===0x151008?new THREE.Color(0xdddddd):new THREE.Color(0x151008); }
 function saveSnap() { renderer.render(scene, camera); const a=document.createElement('a'); a.href=canvas.toDataURL(); a.download='pose.png'; a.click(); }
 
