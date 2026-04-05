@@ -196,10 +196,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 <!-- Three.js + GLTFLoader -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-// ── GLTFLoader inline (r128 compatible) ───────────────────────────────────────
-// We load via a dynamic script tag from CDN
-</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script>
 
@@ -208,10 +204,9 @@ const MODEL_URLS = {
   ybot: 'https://farbrorjannis.github.io/kroki3dmodell/ybot.glb',
 };
 
-// ── POSES (bone rotations in radians) ────────────────────────────────────────
+// ── POSES ────────────────────────────────────────────────────────────────────
 const DEG = Math.PI / 180;
 
-// Mixamo bone names
 const B = {
   hips:       'mixamorigHips',
   spine:      'mixamorigSpine',
@@ -237,7 +232,6 @@ const B = {
 
 const POSES = {
   'T-Pose': {},
-
   'Standing': {
     [B.spine]:     {x: 2},
     [B.spine1]:    {x: 2},
@@ -248,7 +242,6 @@ const POSES = {
     [B.lUpLeg]:    {x: 3,  z: 3},
     [B.rUpLeg]:    {x: 3,  z:-3},
   },
-
   'Sitting': {
     [B.hips]:      {x:-5},
     [B.spine]:     {x:-8},
@@ -263,7 +256,6 @@ const POSES = {
     [B.lForeArm]:  {x:-30},
     [B.rForeArm]:  {x:-30},
   },
-
   'Walking': {
     [B.hips]:      {y: 8},
     [B.spine]:     {x: 5, y: 5},
@@ -278,7 +270,6 @@ const POSES = {
     [B.lFoot]:     {x:-8},
     [B.rFoot]:     {x: 15},
   },
-
   'Running': {
     [B.hips]:      {x: 10, y: 10},
     [B.spine]:     {x: 15},
@@ -294,7 +285,6 @@ const POSES = {
     [B.lFoot]:     {x:-20},
     [B.rFoot]:     {x: 20},
   },
-
   'Arms Up': {
     [B.spine]:     {x:-5},
     [B.spine1]:    {x:-5},
@@ -306,7 +296,6 @@ const POSES = {
     [B.rUpLeg]:    {z:-3},
     [B.head]:      {x:-15},
   },
-
   'Reaching': {
     [B.hips]:      {y:-12},
     [B.spine]:     {x: 5, y:-10},
@@ -321,7 +310,6 @@ const POSES = {
     [B.rUpLeg]:    {z:-4},
     [B.lLeg]:      {x: 8},
   },
-
   'Crouching': {
     [B.hips]:      {x:-15},
     [B.spine]:     {x: 25},
@@ -337,7 +325,6 @@ const POSES = {
     [B.lFoot]:     {x:-30},
     [B.rFoot]:     {x:-30},
   },
-
   'Looking Down': {
     [B.spine]:     {x: 8},
     [B.spine1]:    {x:12},
@@ -351,7 +338,6 @@ const POSES = {
     [B.lUpLeg]:    {x: 3, z: 3},
     [B.rUpLeg]:    {x: 3, z:-3},
   },
-
   'Kroki A': {
     [B.hips]:      {y:-15, x: 5},
     [B.spine]:     {x: 10, y:-10},
@@ -369,7 +355,6 @@ const POSES = {
     [B.lFoot]:     {x:-10},
     [B.rFoot]:     {x: 5},
   },
-
   'Kroki B': {
     [B.hips]:      {x: 5, z: 8},
     [B.spine]:     {x: 8, z: 5},
@@ -404,10 +389,9 @@ scene.fog = new THREE.Fog(0x151008, 6, 16);
 const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 30);
 camera.position.set(0, 1.0, 3.8);
 
-// Lights
 const ambLight   = new THREE.AmbientLight(0xffe8cc, 0.30);
 const keyLight   = new THREE.DirectionalLight(0xfff0e0, 0.80);
-const fillLight  = new THREE.DirectionalLight(0xc8d8ff, 0.40);
+const fillLight = new THREE.DirectionalLight(0xc8d8ff, 0.40);
 const rimLight   = new THREE.DirectionalLight(0xffe0b0, 0.60);
 
 keyLight.position.set(2, 4, 2.5);
@@ -422,7 +406,6 @@ rimLight.position.set(0.5, 3, -3);
 
 scene.add(ambLight, keyLight, fillLight, rimLight);
 
-// Ground
 const groundMat = new THREE.MeshStandardMaterial({ color:0x0e0904, roughness:0.95, metalness:0 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), groundMat);
 ground.rotation.x = -Math.PI / 2;
@@ -433,7 +416,6 @@ const grid = new THREE.GridHelper(6, 24, 0x3d2d1a, 0x261a09);
 grid.position.y = 0.001;
 scene.add(grid);
 
-// ── STATE ─────────────────────────────────────────────────────────────────────
 let currentModel = null;
 let bones = {};
 let currentPose = 'Standing';
@@ -442,7 +424,6 @@ let lightBg = false;
 let gridOn = true;
 let currentModelKey = 'xbot';
 
-// ── GLTF LOADER ───────────────────────────────────────────────────────────────
 const loader = new THREE.GLTFLoader();
 
 function showError(msg) {
@@ -471,29 +452,30 @@ function loadModel(key) {
   loader.load(url,
     (gltf) => {
       const model = gltf.scene;
-      const model = gltf.scene;
 
-// --- FIX FÖR ROTATION ---
-// Mixamo-modeller hamnar ofta på rygg. Denna rad tvingar den att stå upp:
-model.rotation.x = 0; 
-// Om den fortfarande ligger ner efter detta, testa: model.rotation.x = -Math.PI / 2;
+      // FIX: Roterar modellen så den står upp (vissa konverterare skapar X-rotation)
+      model.rotation.set(0, 0, 0);
 
-// --- FIX FÖR POSITION ---
-// Detta ser till att gubben inte svävar utan står på "golvet"
-model.position.y = 0;
-
-      // Collect bones FIRST, before any transformations
       model.traverse(child => {
         if (child.isBone) bones[child.name] = child;
         if (child.isSkinnedMesh && child.skeleton) {
           child.skeleton.bones.forEach(b => { bones[b.name] = b; });
         }
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          // Fixa material: Gör mattare och visa båda sidor
+          if (child.material) {
+            child.material.metalness = 0.1;
+            child.material.roughness = 0.6;
+            child.material.side = THREE.DoubleSide;
+          }
+          child.userData._mat = child.material;
+        }
       });
 
-      // Reset to T-pose so bounding box is accurate
       Object.values(bones).forEach(b => b.rotation.set(0, 0, 0));
 
-      // Calculate bounding box from MESH ONLY (not bones/skeleton)
       const meshBox = new THREE.Box3();
       model.traverse(child => {
         if (child.isSkinnedMesh || child.isMesh) {
@@ -502,40 +484,23 @@ model.position.y = 0;
         }
       });
 
-      // If meshBox is empty fall back to full model box
-      const box = meshBox.isEmpty()
-        ? new THREE.Box3().setFromObject(model)
-        : meshBox;
-
+      const box = meshBox.isEmpty() ? new THREE.Box3().setFromObject(model) : meshBox;
       const size = box.getSize(new THREE.Vector3());
       const scale = 1.75 / size.y;
       model.scale.setScalar(scale);
 
-      // Center horizontally, feet on ground
       const center = box.getCenter(new THREE.Vector3());
       model.position.x = -center.x * scale;
       model.position.z = -center.z * scale;
       model.position.y = -box.min.y * scale;
 
-      // Shadows & wireframe state
-      model.traverse(child => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          child.userData._mat = child.material;
-          if (wireMode) child.material = new THREE.MeshBasicMaterial({wireframe:true, color:0x8aaa66});
-        }
-      });
-
       scene.add(model);
       currentModel = model;
       currentModelKey = key;
 
-      // Reset camera to show full body
       orb = { theta: 0, phi: 0.05, r: 4.5, ty: 0.85 };
       updateCamera();
 
-      // Apply pose after scene is updated
       setTimeout(() => {
         applyPose(currentPose, true);
         loadingEl.classList.add('hidden');
@@ -550,13 +515,11 @@ model.position.y = 0;
     },
     (error) => {
       loadingEl.classList.add('hidden');
-      showError('Could not load model. Check GitHub Pages is active and files are uploaded. (' + error.message + ')');
-      console.error(error);
+      showError('Could not load model. ' + error.message);
     }
   );
 }
 
-// ── POSE SYSTEM ───────────────────────────────────────────────────────────────
 function setBoneRot(boneName, rx, ry, rz) {
   const bone = bones[boneName];
   if (!bone) return;
@@ -566,9 +529,7 @@ function setBoneRot(boneName, rx, ry, rz) {
 }
 
 function resetAllBones() {
-  Object.values(bones).forEach(b => {
-    b.rotation.set(0, 0, 0);
-  });
+  Object.values(bones).forEach(b => { b.rotation.set(0, 0, 0); });
 }
 
 function applyPose(poseName, updateBtn = true) {
@@ -584,7 +545,6 @@ function applyPose(poseName, updateBtn = true) {
   }
 }
 
-// Build pose buttons
 const poseBtnsEl = document.getElementById('poseBtns');
 Object.keys(POSES).forEach(name => {
   const btn = document.createElement('button');
@@ -595,7 +555,6 @@ Object.keys(POSES).forEach(name => {
   poseBtnsEl.appendChild(btn);
 });
 
-// ── MODEL SWITCHER ────────────────────────────────────────────────────────────
 function switchModel(key, el) {
   if (key === currentModelKey && currentModel) return;
   document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
@@ -603,7 +562,6 @@ function switchModel(key, el) {
   loadModel(key);
 }
 
-// ── ORBIT CAMERA ──────────────────────────────────────────────────────────────
 let orb = { theta:0, phi:0.12, r:3.8, ty:0.85 };
 let drag = { on:false, x:0, y:0, t0:0, p0:0, btn:0 };
 let panStart = { x:0, y:0, tx:0, ty:0 };
@@ -627,7 +585,6 @@ window.addEventListener('mousemove', e => {
   const dx = (e.clientX - drag.x) / canvas.clientWidth;
   const dy = (e.clientY - drag.y) / canvas.clientHeight;
   if (drag.btn === 2) {
-    // Right drag = pan
     orb.ty = panStart.ty + dy * orb.r * 1.5;
     orb.ty = Math.max(-0.5, Math.min(2.5, orb.ty));
   } else {
@@ -645,41 +602,6 @@ canvas.addEventListener('wheel', e => {
   updateCamera();
 }, { passive: false });
 
-// Touch
-let touch = { on:false, x:0, y:0, t0:0, p0:0, pinch:0, pr:0 };
-canvas.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) {
-    touch = { on:true, x:e.touches[0].clientX, y:e.touches[0].clientY, t0:orb.theta, p0:orb.phi };
-  } else if (e.touches.length === 2) {
-    const d = touchDist(e);
-    touch = { ...touch, pinch:d, pr:orb.r };
-  }
-  e.preventDefault();
-}, { passive:false });
-
-canvas.addEventListener('touchmove', e => {
-  if (e.touches.length === 1 && touch.on) {
-    const dx = (e.touches[0].clientX - touch.x) / canvas.clientWidth;
-    const dy = (e.touches[0].clientY - touch.y) / canvas.clientHeight;
-    orb.theta = touch.t0 - dx * Math.PI * 2;
-    orb.phi   = Math.max(-0.25, Math.min(1.2, touch.p0 + dy * Math.PI));
-    updateCamera();
-  } else if (e.touches.length === 2) {
-    const d = touchDist(e);
-    orb.r = Math.max(0.8, Math.min(7, touch.pr * (touch.pinch / d)));
-    updateCamera();
-  }
-  e.preventDefault();
-}, { passive:false });
-
-canvas.addEventListener('touchend', () => { touch.on = false; });
-function touchDist(e) {
-  const dx = e.touches[0].clientX - e.touches[1].clientX;
-  const dy = e.touches[0].clientY - e.touches[1].clientY;
-  return Math.sqrt(dx*dx + dy*dy);
-}
-
-// ── ACTIONS ───────────────────────────────────────────────────────────────────
 function toggleLightPanel() {
   const p = document.getElementById('light-panel');
   p.classList.toggle('open');
@@ -695,7 +617,6 @@ function setLight(type, val) {
   if (type === 'shd')  {
     renderer.shadowMap.enabled = val > 0;
     document.getElementById('v-shd').textContent = val > 0 ? 'on' : 'off';
-    scene.traverse(c => { if (c.material) c.material.needsUpdate = true; });
   }
 }
 
@@ -734,13 +655,12 @@ function saveSnap() {
   renderer.render(scene, camera);
   canvas.toBlob(blob => {
     const a = document.createElement('a');
-    a.download = 'mannequin-' + currentModelKey + '-' + currentPose.replace(/\s/g,'-') + '.png';
+    a.download = 'mannequin.png';
     a.href = URL.createObjectURL(blob);
     a.click();
   });
 }
 
-// ── RESIZE & RENDER ───────────────────────────────────────────────────────────
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
   renderer.setSize(w, h, false);
@@ -758,13 +678,11 @@ resize();
 updateCamera();
 animate();
 
-// Start by loading xbot
 loadModel('xbot');
 
-// Hide hint after 5s
 setTimeout(() => {
   const h = document.getElementById('hint');
-  h.style.opacity = '0';
+  if(h) h.style.opacity = '0';
 }, 5000);
 
 </script>
