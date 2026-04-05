@@ -2,117 +2,114 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>3D Mannequin Fix</title>
+    <title>3D Mannequin - Final Debug</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; background: #1a1a1a; display: flex; gap: 10px; padding: 10px; z-index: 100; border-bottom: 1px solid #333; }
-        .btn { background: #333; color: white; border: 1px solid #444; padding: 8px 15px; cursor: pointer; font-size: 12px; border-radius: 4px; }
-        .btn.active { background: #c07d2b; color: #000; font-weight: bold; }
-        #loader { position: absolute; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 200; color: #c07d2b; }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: sans-serif; color: white; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; background: rgba(20,20,20,0.9); display: flex; gap: 10px; padding: 15px; z-index: 100; }
+        .btn { background: #333; color: white; border: 1px solid #555; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
+        .btn:hover { background: #444; }
+        #status { position: absolute; bottom: 20px; left: 20px; font-size: 12px; color: #888; z-index: 100; }
+        #loader { position: absolute; inset: 0; background: #000; display: flex; align-items: center; justify-content: center; z-index: 200; font-weight: bold; color: orange; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <button class="btn active" id="btn-x" onclick="changeModel('xbot')">MALE</button>
-    <button class="btn" id="btn-y" onclick="changeModel('ybot')">FEMALE</button>
-    <div style="width:1px; background:#444;"></div>
-    <button class="btn pose-btn" onclick="applyPose('Stand')">STAND</button>
-    <button class="btn pose-btn" onclick="applyPose('Sit')">SIT</button>
-    <button class="btn pose-btn" onclick="applyPose('Crouch')">CROUCH</button>
+    <button class="btn" onclick="changeModel('xbot')">MALE</button>
+    <button class="btn" onclick="changeModel('ybot')">FEMALE</button>
+    <button class="btn" onclick="applyPose('Stand')">STAND</button>
+    <button class="btn" onclick="applyPose('Sit')">SIT</button>
 </div>
 
-<div id="loader">LOADING MODEL...</div>
+<div id="status">Status: Initializing...</div>
+<div id="loader" id="l-text">LOADING 3D ENGINE...</div>
 <canvas id="c"></canvas>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
+// VIKTIGT: Kontrollera att dessa adresser stämmer med ditt GitHub-namn
 const CONFIG = {
     xbot: 'https://farbrorjannis.github.io/kroki3dmodell/xbot.glb',
     ybot: 'https://farbrorjannis.github.io/kroki3dmodell/ybot.glb'
 };
 
-const B = { 
-    hips: 'mixamorigHips', spine: 'mixamorigSpine', 
-    lA: 'mixamorigLeftArm', rA: 'mixamorigRightArm',
-    lUL: 'mixamorigLeftUpLeg', rUL: 'mixamorigRightUpLeg',
-    lL: 'mixamorigLeftLeg', rL: 'mixamorigRightLeg'
-};
-
-const POSES = {
-    'Stand': { [B.lA]:{z:-1.3}, [B.rA]:{z:1.3} },
-    'Sit': { [B.lUL]:{x:-1.5}, [B.rUL]:{x:-1.5}, [B.lL]:{x:1.5}, [B.rL]:{x:1.5}, [B.hips]:{y:-0.5, z:0.3} },
-    'Crouch': { [B.lUL]:{x:-2}, [B.rUL]:{x:-2}, [B.lL]:{x:2.2}, [B.rL]:{x:2.2}, [B.hips]:{y:-0.8} }
-};
-
 let scene, camera, renderer, model, bones = {};
+const status = document.getElementById('status');
 
 function init() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0a);
+    try {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 1.5, 5);
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 1.6, 4);
 
-    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+        renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
 
-    const light = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(light);
-    const dLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    dLight.position.set(5, 10, 5);
-    scene.add(dLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 1));
+        scene.add(new THREE.GridHelper(10, 20, 0x333333, 0x222222));
 
-    const grid = new THREE.GridHelper(10, 20, 0x333333, 0x222222);
-    scene.add(grid);
-
-    changeModel('xbot');
-    animate();
+        status.innerText = "Status: Engine Ready. Loading Model...";
+        changeModel('xbot');
+        animate();
+    } catch (e) {
+        status.innerText = "Error during init: " + e.message;
+    }
 }
 
 function changeModel(type) {
     document.getElementById('loader').style.display = 'flex';
     if (model) scene.remove(model);
-    bones = {};
+    
+    const loader = new THREE.GLTFLoader();
+    loader.load(CONFIG[type], 
+        (gltf) => {
+            model = gltf.scene;
+            model.scale.setScalar(0.01); 
+            model.rotateX(-Math.PI / 2);
+            
+            bones = {};
+            model.traverse(child => { if (child.isBone) bones[child.name] = child; });
 
-    new THREE.GLTFLoader().load(CONFIG[type], (gltf) => {
-        model = gltf.scene;
-        
-        // MIXAMO FIX: FASTA VÄRDEN
-        model.scale.setScalar(0.01); 
-        model.rotateX(-Math.PI / 2);
-        model.position.y = 0;
-
-        model.traverse(child => {
-            if (child.isBone) bones[child.name] = child;
-        });
-
-        scene.add(model);
-        applyPose('Stand');
-        document.getElementById('loader').style.display = 'none';
-        
-        document.getElementById('btn-x').classList.toggle('active', type === 'xbot');
-        document.getElementById('btn-y').classList.toggle('active', type === 'ybot');
-    });
+            scene.add(model);
+            applyPose('Stand');
+            
+            document.getElementById('loader').style.display = 'none';
+            status.innerText = "Status: Model " + type + " loaded successfully.";
+        },
+        (xhr) => {
+            let percent = Math.round((xhr.loaded / xhr.total) * 100);
+            status.innerText = "Status: Downloading " + percent + "%";
+        },
+        (error) => {
+            status.innerText = "Status: LOAD ERROR - " + error.message;
+            console.error(error);
+        }
+    );
 }
 
 function applyPose(name) {
     if (!model) return;
+    // Nollställ alla ben
     Object.values(bones).forEach(b => b.rotation.set(0, 0, 0));
-    const p = POSES[name];
-    for (let bID in p) {
-        if (bones[bID]) {
-            if (p[bID].x) bones[bID].rotation.x = p[bID].x;
-            if (p[bID].y) bones[bID].rotation.y = p[bID].y;
-            if (p[bID].z) bones[bID].rotation.z = p[bID].z;
-        }
+    
+    const h = 'mixamorigHips', la = 'mixamorigLeftArm', ra = 'mixamorigRightArm';
+    
+    if (name === 'Stand') {
+        if(bones[la]) bones[la].rotation.z = -1.3;
+        if(bones[ra]) bones[ra].rotation.z = 1.3;
+    } else if (name === 'Sit') {
+        const lul = 'mixamorigLeftUpLeg', rul = 'mixamorigRightUpLeg';
+        if(bones[lul]) bones[lul].rotation.x = -1.5;
+        if(bones[rul]) bones[rul].rotation.x = -1.5;
+        if(bones[h]) bones[h].position.y = -50; // Flytta ner höften i sitta
     }
 }
 
-// Enkel mus-rotation
 let rot = 0;
 window.addEventListener('pointermove', (e) => {
     if (e.buttons === 1) rot -= e.movementX * 0.01;
@@ -120,17 +117,17 @@ window.addEventListener('pointermove', (e) => {
 
 function animate() {
     requestAnimationFrame(animate);
-    camera.position.x = 5 * Math.sin(rot);
-    camera.position.z = 5 * Math.cos(rot);
+    camera.position.x = 4 * Math.sin(rot);
+    camera.position.z = 4 * Math.cos(rot);
     camera.lookAt(0, 1, 0);
     renderer.render(scene, camera);
 }
 
-window.addEventListener('resize', () => {
+window.onresize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-});
+};
 
 init();
 </script>
