@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>3D Artist Mannequin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0a0a0a;--panel:rgba(12,10,6,0.96);--border:#2a2a2a;
+  --ochre:#c07d2b;--ochre-l:#f0e0c0;--light:#aaa;--cream:#f5f0e8;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);}
+body{font-family:'Inter',system-ui,sans-serif;color:var(--cream);display:flex;flex-direction:column;}
+
+/* ── TOP BAR ── */
+#topbar{
+  background:rgba(18,12,4,0.97);border-bottom:1px solid var(--border);
+  padding:.45rem .8rem;display:flex;align-items:center;gap:.5rem;
+  flex-shrink:0;z-index:10;flex-wrap:wrap;
+}
+#topbar h1{
+  font-size:.9rem;font-weight:700;color:var(--ochre-l);
+  white-space:nowrap;flex-shrink:0;letter-spacing:.03em;
+}
+.sep{width:1px;height:18px;background:var(--border);flex-shrink:0;}
+
+/* Pose selector */
+#poseSelect{
+  background:#1a1208;color:var(--cream);border:1px solid var(--border);
+  border-radius:6px;padding:.28rem .5rem;font-size:.72rem;
+  cursor:pointer;outline:none;flex:1;min-width:160px;max-width:260px;
+}
+#poseSelect:focus{border-color:var(--ochre);}
+
+/* Action buttons */
+.act-btns{display:flex;gap:.3rem;flex-shrink:0;}
+.act-btn{
+  padding:.28rem .6rem;border:1px solid var(--border);border-radius:6px;
+  background:transparent;color:var(--light);
+  font-size:.68rem;font-weight:600;cursor:pointer;transition:all .15s;
+  white-space:nowrap;
+}
+.act-btn:hover{border-color:var(--ochre);color:var(--ochre);}
+.act-btn.on{background:rgba(192,125,43,.15);border-color:var(--ochre);color:var(--ochre);}
+
+/* ── MAIN ── */
+#main{flex:1;position:relative;overflow:hidden;min-height:0;}
+canvas{width:100%;height:100%;display:block;cursor:grab;}
+canvas.grabbing{cursor:grabbing;}
+
+/* Light panel */
+#light-panel{
+  position:absolute;right:.6rem;top:.6rem;
+  background:rgba(12,8,2,.97);border:1px solid var(--border);
+  border-radius:10px;padding:.7rem .8rem;min-width:165px;
+  display:none;z-index:15;
+}
+#light-panel.open{display:block;}
+.lp-title{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ochre);font-weight:700;margin-bottom:.5rem;}
+.lp-row{margin-bottom:.4rem;}
+.lp-label{display:flex;justify-content:space-between;font-size:.62rem;
+  color:var(--light);margin-bottom:.12rem;}
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:3px;
+  background:var(--border);border-radius:3px;outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:12px;
+  background:var(--ochre);border-radius:50%;cursor:pointer;
+}
+
+/* Hint */
+#hint{
+  position:absolute;bottom:.7rem;left:50%;transform:translateX(-50%);
+  background:rgba(10,6,0,.85);border:1px solid var(--border);
+  color:var(--light);font-size:.65rem;padding:.28rem .8rem;
+  border-radius:20px;pointer-events:none;white-space:nowrap;transition:opacity 1.5s;
+}
+
+@media(max-width:540px){
+  #topbar{padding:.35rem .5rem;gap:.35rem;}
+  #topbar h1{font-size:.78rem;}
+  .act-btn{padding:.22rem .45rem;font-size:.62rem;}
+  #poseSelect{font-size:.68rem;}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>3D Mannequin</h1>
+  <div class="sep"></div>
+  <select id="poseSelect"></select>
+  <div class="sep"></div>
+  <div class="act-btns">
+    <button class="act-btn" id="btnLight" onclick="toggleLight()">💡 Light</button>
+    <button class="act-btn" id="btnWire"  onclick="toggleWire()">◻ Wire</button>
+    <button class="act-btn" id="btnBg"    onclick="toggleBg()">☀ BG</button>
+    <button class="act-btn" id="btnGrid"  onclick="toggleGrid()">⊞ Grid</button>
+    <button class="act-btn"               onclick="saveSnap()">⬇ Save</button>
+  </div>
+</div>
+
+<div id="main">
+  <canvas id="c"></canvas>
+  <div id="hint">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
+  <div id="light-panel">
+    <div class="lp-title">Lighting</div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Key</span><span id="v-key">80%</span></div>
+      <input type="range" min="0" max="200" value="80" oninput="setL('key',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Fill</span><span id="v-fill">40%</span></div>
+      <input type="range" min="0" max="200" value="40" oninput="setL('fill',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Rim</span><span id="v-rim">60%</span></div>
+      <input type="range" min="0" max="200" value="60" oninput="setL('rim',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Ambient</span><span id="v-amb">25%</span></div>
+      <input type="range" min="0" max="100" value="25" oninput="setL('amb',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Shadows</span><span id="v-shd">on</span></div>
+      <input type="range" min="0" max="1" value="1" step="1" oninput="setL('shd',this.value)">
+    </div>
+  </div>
+</div>
+
+<script>
+// ── POSES ─────────────────────────────────────────────────────────────────────
+// Each pose sets rotations (radians) on named joints.
+// Joint tree:
+//   chest → neck → head
+//         → lShoulder → lElbow → lWrist
+//         → rShoulder → rElbow → rWrist
+//         → hips → lHip → lKnee → lAnkle
+//                → rHip → rKnee → rAnkle
+
+const POSES = {
+
+  // ── NEUTRAL & BASIC ────────────────────────────────────────────────────────
+  "T-Pose": {},
+
+  "Standing": {
+    chest:     {x: 0.04},
+    lShoulder: {z:-0.14, x: 0.08},
+    rShoulder: {z: 0.14, x: 0.08},
+    lHip:      {x: 0.05, z: 0.05},
+    rHip:      {x: 0.05, z:-0.05},
+  },
+
+  "At Ease": {
+    chest:     {x: 0.03, z: 0.04},
+    hips:      {z: 0.06},
+    lShoulder: {z:-0.18},
+    rShoulder: {z: 0.12},
+    lHip:      {x: 0.04, z: 0.08},
+    rHip:      {x: 0.06, z:-0.12},
+    rKnee:     {x: 0.08},
+  },
+
+  "Contrapposto": {
+    hips:      {z: 0.10},
+    chest:     {z:-0.07},
+    lShoulder: {z:-0.20},
+    rShoulder: {z: 0.14},
+    lHip:      {x: 0.04, z: 0.08},
+    rHip:      {x: 0.06, z:-0.14},
+    lKnee:     {x: 0.05},
+    rKnee:     {x: 0.12},
+  },
+
+  "Hand on Hip": {
+    hips:      {z: 0.07},
+    chest:     {z:-0.05, x: 0.03},
+    lShoulder: {x: 0.26, z:-0.96},
+    lElbow:    {x:-0.35},
+    rShoulder: {z: 0.17},
+    lHip:      {z: 0.10},
+    rHip:      {z:-0.07},
+  },
+
+  "Arms Crossed": {
+    chest:     {x: 0.05},
+    lShoulder: {x: 0.70, z:-0.52},
+    rShoulder: {x: 0.70, z: 0.52},
+    lElbow:    {x:-1.57, y: 1.05},
+    rElbow:    {x:-1.57, y:-1.05},
+  },
+
+  // ── LOCOMOTION ─────────────────────────────────────────────────────────────
+  "Walking": {
+    chest:     {x: 0.09, y: 0.09},
+    lShoulder: {x:-0.52, z:-0.17},
+    rShoulder: {x: 0.61, z: 0.17},
+    lElbow:    {x:-0.44},
+    rElbow:    {x:-0.61},
+    lHip:      {x:-0.61, z: 0.07},
+    rHip:      {x: 0.52, z:-0.07},
+    lKnee:     {x: 0.17},
+    rKnee:     {x: 0.38},
+    lAnkle:    {x:-0.14},
+    rAnkle:    {x: 0.26},
+  },
+
+  "Running": {
+    chest:     {x: 0.26, y: 0.17},
+    lShoulder: {x: 0.96, z:-0.21},
+    rShoulder: {x:-0.96, z: 0.21},
+    lElbow:    {x:-1.40},
+    rElbow:    {x:-1.22},
+    lHip:      {x:-1.13, z: 0.09},
+    rHip:      {x: 1.22, z:-0.09},
+    lKnee:     {x: 0.35},
+    rKnee:     {x: 1.40},
+    lAnkle:    {x:-0.35},
+    rAnkle:    {x: 0.35},
+  },
+
+  "Sprinting": {
+    chest:     {x: 0.40, y: 0.22},
+    lShoulder: {x: 1.22, z:-0.26},
+    rShoulder: {x:-1.40, z: 0.26},
+    lElbow:    {x:-1.57},
+    rElbow:    {x:-1.40},
+    lHip:      {x:-1.40, z: 0.12},
+    rHip:      {x: 1.57, z:-0.12},
+    lKnee:     {x: 0.52},
+    rKnee:     {x: 1.74},
+    lAnkle:    {x:-0.52},
+    rAnkle:    {x: 0.26},
+  },
+
+  "Sneaking": {
+    hips:      {x:-0.26},
+    chest:     {x:-0.17, y: 0.09},
+    lShoulder: {x:-0.35, z:-0.35},
+    rShoulder: {x: 0.44, z: 0.35},
+    lElbow:    {x:-0.44},
+    rElbow:    {x:-0.52},
+    lHip:      {x:-0.70, z: 0.07},
+    rHip:      {x: 0.44, z:-0.07},
+    lKnee:     {x: 0.87},
+    rKnee:     {x: 0.61},
+    lAnkle:    {x:-0.26},
+    rAnkle:    {x:-0.17},
+  },
+
+  // ── SITTING & KNEELING ─────────────────────────────────────────────────────
+  "Sitting": {
+    chest:     {x:-0.14},
+    lShoulder: {z:-0.26},
+    rShoulder: {z: 0.26},
+    lElbow:    {x:-0.52},
+    rElbow:    {x:-0.52},
+    lHip:      {x:-1.48, z: 0.09},
+    rHip:      {x:-1.48, z:-0.09},
+    lKnee:     {x: 1.48},
+    rKnee:     {x: 1.48},
+    lAnkle:    {x:-0.35},
+    rAnkle:    {x:-0.35},
+  },
+
+  "Sitting Relaxed": {
+    hips:      {x:-0.09, z: 0.09},
+    chest:     {x:-0.17, z:-0.07},
+    lShoulder: {z:-0.44},
+    rShoulder: {x: 0.17, z: 0.35},
+    lElbow:    {x:-0.87},
+    rElbow:    {x:-0.52},
+    lHip:      {x:-1.48, z: 0.12},
+    rHip:      {x:-1.31, z:-0.17},
+    lKnee:     {x: 1.48},
+    rKnee:     {x: 1.57},
+    lAnkle:    {x:-0.35},
+    rAnkle:    {x:-0.52},
+  },
+
+  "Kneeling": {
+    hips:      {x:-0.17},
+    chest:     {x: 0.09},
+    lShoulder: {z:-0.17},
+    rShoulder: {z: 0.17},
+    lHip:      {x:-1.48, z: 0.09},
+    rHip:      {x:-1.92, z:-0.09},
+    lKnee:     {x: 1.48},
+    rKnee:     {x: 0.35},
+    lAnkle:    {x:-0.26},
+    rAnkle:    {x: 1.48},
+  },
+
+  "Both Knees Down": {
+    hips:      {x:-0.17},
+    chest:     {x: 0.05},
+    lShoulder: {z:-0.17},
+    rShoulder: {z: 0.17},
+    lHip:      {x:-1.74, z: 0.09},
+    rHip:      {x:-1.74, z:-0.09},
+    lKnee:     {x: 0.26},
+    rKnee:     {x: 0.26},
+    lAnkle:    {x: 1.48},
+    rAnkle:    {x: 1.48},
+  },
+
+  // ── ARMS ───────────────────────────────────────────────────────────────────
+  "Arms Up": {
+    chest:     {x:-0.09},
+    lShoulder: {x:-1.57, z:-0.35},
+    rShoulder: {x:-1.57, z: 0.35},
+    lElbow:    {x: 0.17},
+    rElbow:    {x: 0.17},
+    head:      {x:-0.26},
+  },
+
+  "One Arm Up": {
+    hips:      {z: 0.05},
+    chest:     {z:-0.04},
+    lShoulder: {x:-1.57, z:-0.26},
+    lElbow:    {x: 0.09},
+    rShoulder: {z: 0.17},
+    lHip:      {z: 0.07},
+    rHip:      {z:-0.05},
+  },
+
+  "Reaching Forward": {
+    hips:      {x: 0.17},
+    chest:     {x:-0.09, y:-0.17},
+    lShoulder: {x:-1.22, z:-0.17},
+    rShoulder: {x: 0.17, z: 0.21},
+    lElbow:    {x:-0.26},
+    rElbow:    {x:-0.35},
+    lHip:      {x:-0.14, z: 0.09},
+    rHip:      {x:-0.14, z:-0.07},
+  },
+
+  "Reaching Up": {
+    hips:      {z: 0.05},
+    chest:     {x:-0.09, z:-0.04},
+    lShoulder: {x:-1.74, z:-0.52, y:-0.17},
+    rShoulder: {x: 0.09, z: 0.21},
+    lElbow:    {x:-0.26},
+    rElbow:    {x:-0.17},
+    head:      {x:-0.22, y:-0.17},
+  },
+
+  "Pointing": {
+    hips:      {y:-0.21},
+    chest:     {x: 0.09, y:-0.17},
+    lShoulder: {x:-1.40, z:-1.13, y:-0.17},
+    rShoulder: {x: 0.17, z: 0.21},
+    lElbow:    {x:-0.26},
+    rElbow:    {x:-0.35},
+    head:      {x: 0.14, y:-0.26},
+    lHip:      {x:-0.14, z: 0.09},
+    rHip:      {x:-0.07, z:-0.07},
+  },
+
+  // ── DYNAMIC & ACTION ───────────────────────────────────────────────────────
+  "Jumping": {
+    chest:     {x:-0.09},
+    lShoulder: {x:-1.22, z:-0.35},
+    rShoulder: {x:-1.22, z: 0.35},
+    lElbow:    {x: 0.26},
+    rElbow:    {x: 0.26},
+    lHip:      {x:-0.35, z: 0.26},
+    rHip:      {x:-0.35, z:-0.26},
+    lKnee:     {x: 0.52},
+    rKnee:     {x: 0.52},
+    lAnkle:    {x:-0.26},
+    rAnkle:    {x:-0.26},
+  },
+
+  "Landing": {
+    hips:      {x:-0.26},
+    chest:     {x: 0.44},
+    lShoulder: {x: 0.26, z:-0.35},
+    rShoulder: {x: 0.26, z: 0.35},
+    lElbow:    {x:-0.70},
+    rElbow:    {x:-0.70},
+    lHip:      {x:-1.31, z: 0.17},
+    rHip:      {x:-1.31, z:-0.17},
+    lKnee:     {x: 1.74},
+    rKnee:     {x: 1.74},
+    lAnkle:    {x:-0.52},
+    rAnkle:    {x:-0.52},
+  },
+
+  "Hero Pose": {
+    hips:      {x: 0.17, y: 0.26},
+    chest:     {x:-0.09, y: 0.17},
+    lShoulder: {x:-0.87, z:-0.26},
+    rShoulder: {x: 0.35, z: 0.61},
+    lElbow:    {x:-0.52},
+    rElbow:    {x:-0.79},
+    lHip:      {x:-0.70, z: 0.35},
+    rHip:      {x: 0.44, z:-0.17},
+    lKnee:     {x: 0.26},
+    rKnee:     {x: 0.52},
+    head:      {x:-0.09, y: 0.09},
+  },
+
+  "Warrior": {
+    hips:      {y: 0.26},
+    chest:     {x: 0.09, y: 0.17},
+    lShoulder: {x:-1.05, z:-0.26},
+    rShoulder: {x: 0.35, z: 0.61},
+    lElbow:    {x:-0.52},
+    rElbow:    {x:-0.79},
+    lHip:      {x:-0.70, z: 0.35},
+    rHip:      {x: 0.44, z:-0.17},
+    lKnee:     {x: 0.26},
+    rKnee:     {x: 0.52},
+  },
+
+  "Fighting Stance": {
+    hips:      {y: 0.52},
+    chest:     {x: 0.17, y: 0.26},
+    lShoulder: {x: 0.79, z:-0.35},
+    rShoulder: {x: 0.87, z: 0.44},
+    lElbow:    {x:-1.22},
+    rElbow:    {x:-1.31},
+    lHip:      {x:-0.44, z: 0.17},
+    rHip:      {x: 0.26, z:-0.26},
+    lKnee:     {x: 0.35},
+    rKnee:     {x: 0.52},
+  },
+
+  "Throwing": {
+    hips:      {y:-0.52},
+    chest:     {x: 0.09, y:-0.35},
+    lShoulder: {x: 0.26, z:-0.52},
+    rShoulder: {x:-1.57, z: 0.26},
+    lElbow:    {x:-0.52},
+    rElbow:    {x:-0.44},
+    lHip:      {x:-0.26, z: 0.35},
+    rHip:      {x: 0.17, z:-0.44},
+    lKnee:     {x: 0.44},
+    rKnee:     {x: 0.26},
+    head:      {y:-0.26},
+  },
+
+  // ── BENDING & STRETCHING ───────────────────────────────────────────────────
+  "Bending Forward": {
+    hips:      {x: 0.35},
+    chest:     {x:-0.87},
+    neck:      {x: 0.26},
+    head:      {x: 0.35},
+    lShoulder: {x: 0.35, z:-0.17},
+    rShoulder: {x: 0.35, z: 0.17},
+    lHip:      {x:-0.09, z: 0.07},
+    rHip:      {x:-0.09, z:-0.07},
+  },
+
+  "Bending Back": {
+    hips:      {x:-0.22},
+    chest:     {x:-0.52},
+    neck:      {x:-0.17},
+    head:      {x:-0.26},
+    lShoulder: {x:-0.35, z:-0.17},
+    rShoulder: {x:-0.35, z: 0.17},
+    lHip:      {x: 0.07, z: 0.07},
+    rHip:      {x: 0.07, z:-0.07},
+  },
+
+  "Side Stretch": {
+    hips:      {z: 0.09},
+    chest:     {z:-0.44},
+    lShoulder: {x:-1.22, z:-0.17},
+    rShoulder: {z: 0.35},
+    lElbow:    {x: 0.09},
+    rElbow:    {x:-0.26},
+    lHip:      {z: 0.12},
+    rHip:      {z:-0.07},
+  },
+
+  "Twisting": {
+    hips:      {y:-0.35},
+    chest:     {y: 0.61},
+    lShoulder: {x: 0.17, z:-0.52, y: 0.26},
+    rShoulder: {x:-0.09, z: 0.26, y:-0.17},
+    lElbow:    {x:-0.52},
+    rElbow:    {x:-0.26},
+  },
+
+  // ── LOOKING ────────────────────────────────────────────────────────────────
+  "Looking Up": {
+    chest:     {x:-0.09},
+    neck:      {x:-0.17},
+    head:      {x:-0.44},
+    lShoulder: {z:-0.17},
+    rShoulder: {z: 0.17},
+  },
+
+  "Looking Down": {
+    chest:     {x: 0.14},
+    neck:      {x: 0.14},
+    head:      {x: 0.44},
+    lShoulder: {z:-0.17},
+    rShoulder: {z: 0.17},
+  },
+
+  "Looking Back": {
+    hips:      {y: 0.70},
+    chest:     {y:-0.96},
+    neck:      {y:-0.35},
+    head:      {y:-0.26},
+    lShoulder: {z:-0.17, y: 0.17},
+    rShoulder: {z: 0.17, y:-0.17},
+  },
+
+  "Head Tilt": {
+    chest:     {x: 0.03},
+    neck:      {z: 0.17},
+    head:      {z: 0.26, x: 0.09},
+    lShoulder: {z:-0.17},
+    rShoulder: {z: 0.22},
+  },
+
+  // ── EXPRESSIVE ─────────────────────────────────────────────────────────────
+  "Thinking": {
+    hips:      {z: 0.05},
+    chest:     {x: 0.09, z:-0.04},
+    neck:      {x: 0.09, z: 0.09},
+    head:      {x: 0.14, z: 0.14},
+    lShoulder: {x: 0.61, z:-0.35},
+    rShoulder: {x: 0.96, z: 0.44},
+    lElbow:    {x:-0.52},
+    rElbow:    {x:-1.40},
+    rWrist:    {x:-0.17, z: 0.17},
+  },
+
+  "Crossed Arms Thinking": {
+    chest:     {x: 0.07, z: 0.05},
+    neck:      {x: 0.09},
+    head:      {x: 0.17, z: 0.14},
+    lShoulder: {x: 0.70, z:-0.52},
+    rShoulder: {x: 0.70, z: 0.52},
+    lElbow:    {x:-1.57, y: 1.05},
+    rElbow:    {x:-1.57, y:-1.05},
+  },
+
+  "Celebrating": {
+    hips:      {z: 0.07},
+    chest:     {x:-0.07, z:-0.05},
+    lShoulder: {x:-1.31, z:-0.52},
+    rShoulder: {x:-1.22, z: 0.44},
+    lElbow:    {x: 0.35},
+    rElbow:    {x: 0.26},
+    lHip:      {z: 0.09},
+    rHip:      {z:-0.09},
+    head:      {x:-0.09},
+  },
+
+  "Defeated": {
+    hips:      {x: 0.09},
+    chest:     {x: 0.35},
+    neck:      {x: 0.14},
+    head:      {x: 0.35},
+    lShoulder: {z:-0.52, x: 0.26},
+    rShoulder: {z: 0.52, x: 0.26},
+    lElbow:    {x:-0.35},
+    rElbow:    {x:-0.35},
+    lHip:      {x: 0.09},
+    rHip:      {x: 0.09},
+  },
+
+  "Shrug": {
+    chest:     {x: 0.05},
+    lShoulder: {z:-0.70, x: 0.17},
+    rShoulder: {z: 0.70, x: 0.17},
+    lElbow:    {x:-0.52, y: 0.35},
+    rElbow:    {x:-0.52, y:-0.35},
+    neck:      {x: 0.05},
+    head:      {x: 0.09, z: 0.09},
+  },
+
+  // ── GROUND ─────────────────────────────────────────────────────────────────
+  "Lying Down": {
+    hips:      {x:-1.48},
+    chest:     {x: 0.09},
+    lShoulder: {x: 0.17, z:-0.52},
+    rShoulder: {x: 0.17, z: 0.52},
+    lElbow:    {x:-0.26},
+    rElbow:    {x:-0.26},
+    lHip:      {x: 0.09, z: 0.09},
+    rHip:      {x: 0.09, z:-0.09},
+  },
+
+  "Crouching": {
+    hips:      {x:-0.26},
+    chest:     {x: 0.44},
+    lShoulder: {x: 0.26, z:-0.35},
+    rShoulder: {x: 0.26, z: 0.35},
+    lElbow:    {x:-0.70},
+    rElbow:    {x:-0.70},
+    lHip:      {x:-1.31, z: 0.17},
+    rHip:      {x:-1.31, z:-0.17},
+    lKnee:     {x: 1.74},
+    rKnee:     {x: 1.74},
+    lAnkle:    {x:-0.52},
+    rAnkle:    {x:-0.52},
+  },
+
+  "Push-Up": {
+    hips:      {x:-1.22},
+    chest:     {x: 0.26},
+    lShoulder: {x:-1.22, z:-0.17},
+    rShoulder: {x:-1.22, z: 0.17},
+    lElbow:    {x:-0.87},
+    rElbow:    {x:-0.87},
+    lHip:      {x: 0.09},
+    rHip:      {x: 0.09},
+    lKnee:     {x:-0.09},
+    rKnee:     {x:-0.09},
+  },
+
+  // ── DRAWING REFERENCE ──────────────────────────────────────────────────────
+  "Kroki A": {
+    hips:      {y:-0.26, x: 0.09},
+    chest:     {x: 0.17, y:-0.17},
+    neck:      {y: 0.17},
+    head:      {x: 0.09, y: 0.26},
+    lShoulder: {x: 0.35, z:-0.49},
+    rShoulder: {x:-0.21, z: 0.14},
+    lElbow:    {x:-0.79},
+    rElbow:    {x:-0.31},
+    lHip:      {x:-0.31, z: 0.21},
+    rHip:      {x: 0.49, z:-0.10},
+    lKnee:     {x: 0.38},
+    rKnee:     {x: 0.21},
+    lAnkle:    {x:-0.17},
+    rAnkle:    {x: 0.09},
+  },
+
+  "Kroki B": {
+    hips:      {x: 0.09, z: 0.14},
+    chest:     {x: 0.14, z: 0.09},
+    lShoulder: {x:-0.09, z:-0.87},
+    rShoulder: {x:-0.09, z: 0.14},
+    lElbow:    {x:-0.35},
+    rElbow:    {x:-0.21},
+    lHip:      {x: 0.09, z: 0.44},
+    rHip:      {x:-0.14, z:-0.14},
+    lKnee:     {x: 0.09},
+    rKnee:     {x: 0.09},
+  },
+
+  "Kroki C": {
+    hips:      {y: 0.35, z: 0.09},
+    chest:     {y:-0.26, x: 0.09},
+    lShoulder: {x: 0.17, z:-0.61},
+    rShoulder: {x:-0.35, z: 0.26},
+    lElbow:    {x:-0.44},
+    rElbow:    {x:-0.17},
+    lHip:      {x:-0.61, z: 0.17},
+    rHip:      {x: 0.35, z:-0.09},
+    lKnee:     {x: 0.87},
+    rKnee:     {x: 0.26},
+    head:      {y:-0.17, x: 0.09},
+  },
+
+  "Kroki D": {
+    hips:      {z:-0.12},
+    chest:     {z: 0.09, x:-0.07},
+    lShoulder: {x:-0.09, z:-0.26},
+    rShoulder: {x: 0.44, z: 0.87},
+    lElbow:    {x:-0.17},
+    rElbow:    {x:-0.96},
+    lHip:      {x: 0.09, z: 0.17},
+    rHip:      {x:-0.26, z:-0.26},
+    lKnee:     {x: 0.09},
+    rKnee:     {x: 0.52},
+    head:      {z:-0.09},
+  },
+
+};
+
+// ── THREE.JS SETUP ────────────────────────────────────────────────────────────
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+renderer.outputEncoding    = THREE.sRGBEncoding;
+renderer.toneMapping       = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0806);
+scene.fog        = new THREE.Fog(0x0a0806, 8, 20);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 40);
+
+// Lights
+const ambLight  = new THREE.AmbientLight(0xfff5e0, 0.25);
+const keyLight  = new THREE.DirectionalLight(0xfff8f0, 0.80);
+const fillLight = new THREE.DirectionalLight(0xd0e0ff, 0.40);
+const rimLight  = new THREE.DirectionalLight(0xffe0b0, 0.60);
+
+keyLight.position.set(3, 5, 3);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024,1024);
+keyLight.shadow.camera.near  = 0.5;
+keyLight.shadow.camera.far   = 14;
+keyLight.shadow.camera.left  = keyLight.shadow.camera.bottom = -3;
+keyLight.shadow.camera.right = keyLight.shadow.camera.top   =  3;
+fillLight.position.set(-3, 2, -2);
+rimLight.position.set(1, 4, -4);
+scene.add(ambLight, keyLight, fillLight, rimLight);
+
+// Ground
+const groundMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(14,14),
+  new THREE.MeshStandardMaterial({color:0x100c08, roughness:0.98, metalness:0})
+);
+groundMesh.rotation.x = -Math.PI/2;
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+
+const grid = new THREE.GridHelper(8, 28, 0x2a2010, 0x1a1208);
+grid.position.y = 0.001;
+scene.add(grid);
+
+// ── BUILD MANNEQUIN ───────────────────────────────────────────────────────────
+const MAT = new THREE.MeshStandardMaterial({
+  color:0xe8dfd0, roughness:0.55, metalness:0.05,
+  emissive:0x110e0a, emissiveIntensity:0.15
+});
+const JOINT_MAT = new THREE.MeshStandardMaterial({
+  color:0x5a4a38, roughness:0.6, metalness:0.1
+});
+
+function box(w,h,d){ return new THREE.BoxGeometry(w,h,d); }
+function cyl(r,h,s=14){ return new THREE.CylinderGeometry(r,r,h,s); }
+function sph(r,s=14){ return new THREE.SphereGeometry(r,s,s); }
+
+function part(geo, mat, x,y,z){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x,y,z);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
+function joint(r, x,y,z){
+  return part(sph(r), JOINT_MAT, x,y,z);
+}
+
+// Pivot groups (rotation applied here)
+const joints = {};
+function pivot(name, parent, x,y,z){
+  const g = new THREE.Group();
+  g.position.set(x,y,z);
+  parent.add(g);
+  joints[name] = g;
+  return g;
+}
+
+const root = new THREE.Group();
+root.position.y = 0; // feet on ground
+scene.add(root);
+
+// ── BODY ──────────────────────────────────────────────────────────────────────
+// Hips
+const hipsG = pivot('hips', root, 0, 0.95, 0);
+hipsG.add(part(box(0.38,0.22,0.22), MAT, 0,0,0));
+hipsG.add(joint(0.09, 0,0.11,0));
+
+// Chest
+const chestG = pivot('chest', hipsG, 0, 0.20, 0);
+chestG.add(part(box(0.42,0.36,0.22), MAT, 0,0.05,0));
+
+// Neck
+const neckG = pivot('neck', chestG, 0, 0.26, 0);
+neckG.add(part(cyl(0.06,0.12), MAT, 0,0.06,0));
+neckG.add(joint(0.07, 0,0,0));
+
+// Head
+const headG = pivot('head', neckG, 0, 0.14, 0);
+headG.add(part(sph(0.18), MAT, 0,0.10,0));
+
+// ── LEFT ARM ──────────────────────────────────────────────────────────────────
+const lShoulderG = pivot('lShoulder', chestG, -0.25, 0.18, 0);
+lShoulderG.add(joint(0.08, 0,0,0));
+lShoulderG.add(part(cyl(0.07,0.30), MAT, 0,-0.18,0));
+
+const lElbowG = pivot('lElbow', lShoulderG, 0, -0.33, 0);
+lElbowG.add(joint(0.07, 0,0,0));
+lElbowG.add(part(cyl(0.06,0.26), MAT, 0,-0.16,0));
+
+const lWristG = pivot('lWrist', lElbowG, 0, -0.29, 0);
+lWristG.add(joint(0.055, 0,0,0));
+lWristG.add(part(box(0.10,0.07,0.05), MAT, 0,-0.06,0));
+
+// ── RIGHT ARM ─────────────────────────────────────────────────────────────────
+const rShoulderG = pivot('rShoulder', chestG, 0.25, 0.18, 0);
+rShoulderG.add(joint(0.08, 0,0,0));
+rShoulderG.add(part(cyl(0.07,0.30), MAT, 0,-0.18,0));
+
+const rElbowG = pivot('rElbow', rShoulderG, 0, -0.33, 0);
+rElbowG.add(joint(0.07, 0,0,0));
+rElbowG.add(part(cyl(0.06,0.26), MAT, 0,-0.16,0));
+
+const rWristG = pivot('rWrist', rElbowG, 0, -0.29, 0);
+rWristG.add(joint(0.055, 0,0,0));
+rWristG.add(part(box(0.10,0.07,0.05), MAT, 0,-0.06,0));
+
+// ── LEFT LEG ──────────────────────────────────────────────────────────────────
+const lHipG = pivot('lHip', hipsG, -0.13, -0.11, 0);
+lHipG.add(joint(0.10, 0,0,0));
+lHipG.add(part(cyl(0.09,0.42), MAT, 0,-0.25,0));
+
+const lKneeG = pivot('lKnee', lHipG, 0, -0.46, 0);
+lKneeG.add(joint(0.085, 0,0,0));
+lKneeG.add(part(cyl(0.08,0.38), MAT, 0,-0.22,0));
+
+const lAnkleG = pivot('lAnkle', lKneeG, 0, -0.41, 0);
+lAnkleG.add(joint(0.07, 0,0,0));
+lAnkleG.add(part(box(0.10,0.06,0.18), MAT, 0,-0.06,0.04));
+
+// ── RIGHT LEG ─────────────────────────────────────────────────────────────────
+const rHipG = pivot('rHip', hipsG, 0.13, -0.11, 0);
+rHipG.add(joint(0.10, 0,0,0));
+rHipG.add(part(cyl(0.09,0.42), MAT, 0,-0.25,0));
+
+const rKneeG = pivot('rKnee', rHipG, 0, -0.46, 0);
+rKneeG.add(joint(0.085, 0,0,0));
+rKneeG.add(part(cyl(0.08,0.38), MAT, 0,-0.22,0));
+
+const rAnkleG = pivot('rAnkle', rKneeG, 0, -0.41, 0);
+rAnkleG.add(joint(0.07, 0,0,0));
+rAnkleG.add(part(box(0.10,0.06,0.18), MAT, 0,-0.06,0.04));
+
+// ── POSE SYSTEM ───────────────────────────────────────────────────────────────
+// Map pose keys to joint names
+const KEY_MAP = {
+  hips:'hips', chest:'chest', neck:'neck', head:'head',
+  lShoulder:'lShoulder', lElbow:'lElbow', lWrist:'lWrist',
+  rShoulder:'rShoulder', rElbow:'rElbow', rWrist:'rWrist',
+  lHip:'lHip', lKnee:'lKnee', lAnkle:'lAnkle',
+  rHip:'rHip', rKnee:'rKnee', rAnkle:'rAnkle',
+};
+
+function applyPose(name){
+  // Reset all
+  Object.values(joints).forEach(g => g.rotation.set(0,0,0));
+  const pose = POSES[name] || {};
+  for(const [key, rot] of Object.entries(pose)){
+    const jname = KEY_MAP[key];
+    if(jname && joints[jname]){
+      joints[jname].rotation.x = rot.x || 0;
+      joints[jname].rotation.y = rot.y || 0;
+      joints[jname].rotation.z = rot.z || 0;
+    }
+  }
+}
+
+// ── POPULATE DROPDOWN ─────────────────────────────────────────────────────────
+const sel = document.getElementById('poseSelect');
+
+// Group poses
+const groups = {
+  'Neutral':     ['T-Pose','Standing','At Ease','Contrapposto','Hand on Hip','Arms Crossed'],
+  'Locomotion':  ['Walking','Running','Sprinting','Sneaking'],
+  'Sitting':     ['Sitting','Sitting Relaxed','Kneeling','Both Knees Down'],
+  'Arms':        ['Arms Up','One Arm Up','Reaching Forward','Reaching Up','Pointing'],
+  'Action':      ['Jumping','Landing','Hero Pose','Warrior','Fighting Stance','Throwing'],
+  'Bending':     ['Bending Forward','Bending Back','Side Stretch','Twisting'],
+  'Looking':     ['Looking Up','Looking Down','Looking Back','Head Tilt'],
+  'Expressive':  ['Thinking','Crossed Arms Thinking','Celebrating','Defeated','Shrug'],
+  'Ground':      ['Lying Down','Crouching','Push-Up'],
+  'Drawing Ref': ['Kroki A','Kroki B','Kroki C','Kroki D'],
+};
+
+for(const [grp, names] of Object.entries(groups)){
+  const og = document.createElement('optgroup');
+  og.label = grp;
+  names.forEach(n => {
+    const o = document.createElement('option');
+    o.value = o.textContent = n;
+    og.appendChild(o);
+  });
+  sel.appendChild(og);
+}
+
+sel.value = 'Standing';
+sel.onchange = () => applyPose(sel.value);
+applyPose('Standing');
+
+// ── ORBIT CAMERA ──────────────────────────────────────────────────────────────
+let orb  = {theta:0, phi:0.08, r:3.2, ty:0.95};
+let drag = {on:false, x:0, y:0, t0:0, p0:0, btn:0, tx:0};
+
+function updateCamera(){
+  camera.position.set(
+    orb.r * Math.sin(orb.theta) * Math.cos(orb.phi),
+    orb.ty + orb.r * Math.sin(orb.phi),
+    orb.r * Math.cos(orb.theta) * Math.cos(orb.phi)
+  );
+  camera.lookAt(0, orb.ty, 0);
+}
+
+canvas.addEventListener('mousedown', e => {
+  drag = {on:true, x:e.clientX, y:e.clientY, t0:orb.theta, p0:orb.phi, btn:e.button, tx:orb.ty};
+  canvas.classList.add('grabbing');
+  e.preventDefault();
+});
+window.addEventListener('mousemove', e => {
+  if(!drag.on) return;
+  const dx = (e.clientX - drag.x) / canvas.clientWidth;
+  const dy = (e.clientY - drag.y) / canvas.clientHeight;
+  if(drag.btn === 2){
+    orb.ty = Math.max(-0.5, Math.min(2.5, drag.tx + dy * orb.r * 1.5));
+  } else {
+    orb.theta = drag.t0 - dx * Math.PI * 2;
+    orb.phi   = Math.max(-0.3, Math.min(1.3, drag.p0 + dy * Math.PI));
+  }
+  updateCamera();
+});
+window.addEventListener('mouseup', () => { drag.on=false; canvas.classList.remove('grabbing'); });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  orb.r = Math.max(0.8, Math.min(9, orb.r + e.deltaY * 0.004));
+  updateCamera();
+}, {passive:false});
+
+// Touch
+let t0s = null, pinch0=0, r0=0, th0=0, ph0=0, ty0=0;
+canvas.addEventListener('touchstart', e => {
+  if(e.touches.length===1){
+    t0s={x:e.touches[0].clientX, y:e.touches[0].clientY};
+    th0=orb.theta; ph0=orb.phi; ty0=orb.ty;
+  } else if(e.touches.length===2){
+    pinch0=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    r0=orb.r;
+  }
+  e.preventDefault();
+},{passive:false});
+canvas.addEventListener('touchmove', e => {
+  if(e.touches.length===1 && t0s){
+    const dx=(e.touches[0].clientX-t0s.x)/canvas.clientWidth;
+    const dy=(e.touches[0].clientY-t0s.y)/canvas.clientHeight;
+    orb.theta=th0-dx*Math.PI*2;
+    orb.phi=Math.max(-0.3,Math.min(1.3,ph0+dy*Math.PI));
+    updateCamera();
+  } else if(e.touches.length===2){
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    orb.r=Math.max(0.8,Math.min(9,r0*(pinch0/d)));
+    updateCamera();
+  }
+  e.preventDefault();
+},{passive:false});
+canvas.addEventListener('touchend', ()=>{ t0s=null; });
+
+// ── ACTIONS ───────────────────────────────────────────────────────────────────
+let wireOn=false, bgLight=false, gridOn=true;
+
+function toggleLight(){
+  const p=document.getElementById('light-panel');
+  p.classList.toggle('open');
+  document.getElementById('btnLight').classList.toggle('on',p.classList.contains('open'));
+}
+function setL(t,v){
+  v=parseFloat(v);
+  if(t==='key')  { keyLight.intensity =v/100; document.getElementById('v-key').textContent =v+'%'; }
+  if(t==='fill') { fillLight.intensity=v/100; document.getElementById('v-fill').textContent=v+'%'; }
+  if(t==='rim')  { rimLight.intensity =v/100; document.getElementById('v-rim').textContent =v+'%'; }
+  if(t==='amb')  { ambLight.intensity =v/100; document.getElementById('v-amb').textContent =v+'%'; }
+  if(t==='shd')  {
+    renderer.shadowMap.enabled=v>0;
+    document.getElementById('v-shd').textContent=v>0?'on':'off';
+    scene.traverse(c=>{ if(c.material) c.material.needsUpdate=true; });
+  }
+}
+function toggleWire(){
+  wireOn=!wireOn;
+  document.getElementById('btnWire').classList.toggle('on',wireOn);
+  scene.traverse(c=>{
+    if(!c.isMesh) return;
+    if(wireOn){
+      c.userData._m=c.material;
+      c.material=new THREE.MeshBasicMaterial({wireframe:true,color:0x8aaa66});
+    } else {
+      if(c.userData._m) c.material=c.userData._m;
+    }
+  });
+}
+function toggleBg(){
+  bgLight=!bgLight;
+  document.getElementById('btnBg').classList.toggle('on',bgLight);
+  const col=bgLight?0xddd8d0:0x0a0806;
+  scene.background=new THREE.Color(col);
+  scene.fog=new THREE.Fog(col,8,20);
+  groundMesh.material.color.set(bgLight?0xc8c0b8:0x100c08);
+  ambLight.intensity=bgLight?0.7:0.25;
+}
+function toggleGrid(){
+  gridOn=!gridOn;
+  grid.visible=gridOn;
+  document.getElementById('btnGrid').classList.toggle('on',!gridOn);
+}
+function saveSnap(){
+  renderer.render(scene,camera);
+  canvas.toBlob(blob=>{
+    const a=document.createElement('a');
+    a.download='mannequin-'+sel.value.replace(/\s/g,'-')+'.png';
+    a.href=URL.createObjectURL(blob);
+    a.click();
+  });
+}
+
+// ── RESIZE & RENDER ───────────────────────────────────────────────────────────
+function resize(){
+  const w=canvas.clientWidth, h=canvas.clientHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.updateProjectionMatrix();
+}
+function animate(){
+  requestAnimationFrame(animate);
+  renderer.render(scene,camera);
+}
+new ResizeObserver(resize).observe(canvas);
+resize();
+updateCamera();
+animate();
+
+setTimeout(()=>{ document.getElementById('hint').style.opacity='0'; },5000);
+</script>
+</body>
+</html>
