@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>3D Artist Mannequin – Konstlabbet</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --dark:#2c1f10;--mid:#6b4c2a;--light:#c4a882;
+  --ochre:#c07d2b;--ochre-l:#f0e0c0;--cream:#faf8f3;
+  --border:#3d2d1a;--panel:#1e1509;
+}
+html,body{height:100%;overflow:hidden;background:#111;}
+body{font-family:'Lato',sans-serif;color:var(--cream);display:flex;flex-direction:column;}
+
+/* ── TOP BAR ── */
+#topbar{
+  background:var(--dark);border-bottom:1px solid var(--border);
+  padding:.5rem .9rem;display:flex;align-items:center;gap:.7rem;
+  flex-wrap:wrap;flex-shrink:0;z-index:10;
+}
+#topbar h1{
+  font-family:'Playfair Display',serif;font-size:.95rem;
+  color:var(--ochre-l);font-weight:500;white-space:nowrap;flex-shrink:0;
+}
+.sep{width:1px;height:20px;background:var(--border);flex-shrink:0;}
+
+/* Model selector */
+.model-btns{display:flex;gap:.3rem;}
+.model-btn{
+  display:flex;flex-direction:column;align-items:center;gap:.15rem;
+  padding:.3rem .55rem;border:1px solid var(--border);border-radius:7px;
+  background:transparent;color:var(--light);font-family:'Lato',sans-serif;
+  font-size:.62rem;font-weight:700;cursor:pointer;transition:all .15s;
+  text-transform:uppercase;letter-spacing:.04em;
+}
+.model-btn .icon{font-size:1.1rem;line-height:1;}
+.model-btn:hover{border-color:var(--ochre);color:var(--ochre);}
+.model-btn.active{background:var(--ochre);border-color:var(--ochre);color:var(--dark);}
+
+/* Pose buttons */
+.pose-btns{display:flex;gap:.25rem;flex-wrap:wrap;flex:1;}
+.pose-btn{
+  padding:.28rem .65rem;border:1px solid var(--border);border-radius:20px;
+  background:transparent;color:var(--light);font-family:'Lato',sans-serif;
+  font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.pose-btn:hover{border-color:var(--ochre);color:var(--ochre);}
+.pose-btn.active{background:var(--ochre);border-color:var(--ochre);color:var(--dark);}
+
+/* Action buttons */
+.act-btns{display:flex;gap:.3rem;flex-shrink:0;}
+.act-btn{
+  padding:.28rem .65rem;border:1px solid var(--border);border-radius:6px;
+  background:transparent;color:var(--light);font-family:'Lato',sans-serif;
+  font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.act-btn:hover{border-color:var(--ochre);color:var(--ochre);}
+.act-btn.on{background:rgba(192,125,43,.2);border-color:var(--ochre);color:var(--ochre);}
+
+/* ── MAIN ── */
+#main{flex:1;position:relative;overflow:hidden;min-height:0;}
+
+/* Canvas */
+#viewport{width:100%;height:100%;cursor:grab;}
+#viewport.grabbing{cursor:grabbing;}
+
+/* Loading overlay */
+#loading{
+  position:absolute;inset:0;background:rgba(28,18,6,.92);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1rem;z-index:20;transition:opacity .4s;
+}
+#loading.hidden{opacity:0;pointer-events:none;}
+.spinner{
+  width:44px;height:44px;border:3px solid var(--border);
+  border-top-color:var(--ochre);border-radius:50%;
+  animation:spin .9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+#load-msg{color:var(--light);font-size:.85rem;letter-spacing:.05em;}
+#load-bar-wrap{width:180px;height:3px;background:var(--border);border-radius:3px;}
+#load-bar{height:100%;background:var(--ochre);border-radius:3px;width:0%;transition:width .3s;}
+
+/* Hint */
+#hint{
+  position:absolute;bottom:.8rem;left:50%;transform:translateX(-50%);
+  background:rgba(28,15,4,.8);border:1px solid var(--border);
+  color:var(--light);font-size:.68rem;padding:.3rem .8rem;
+  border-radius:20px;pointer-events:none;white-space:nowrap;
+  transition:opacity 1s;
+}
+
+/* Light slider panel */
+#light-panel{
+  position:absolute;right:.7rem;top:.7rem;
+  background:rgba(30,21,9,.92);border:1px solid var(--border);
+  border-radius:8px;padding:.7rem .8rem;min-width:170px;
+  display:none;z-index:15;
+}
+#light-panel.open{display:block;}
+.lp-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ochre);font-weight:700;margin-bottom:.5rem;}
+.lp-row{margin-bottom:.4rem;}
+.lp-label{display:flex;justify-content:space-between;font-size:.65rem;color:var(--light);margin-bottom:.15rem;}
+input[type=range]{-webkit-appearance:none;width:100%;height:3px;background:var(--border);border-radius:3px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;background:var(--ochre);border-radius:50%;cursor:pointer;}
+
+/* Error banner */
+#error-banner{
+  position:absolute;bottom:2.5rem;left:50%;transform:translateX(-50%);
+  background:#5a1a1a;border:1px solid #8b3a3a;color:#ffaaaa;
+  font-size:.75rem;padding:.4rem 1rem;border-radius:6px;
+  display:none;z-index:30;text-align:center;max-width:90%;
+}
+
+@media(max-width:600px){
+  #topbar{padding:.35rem .5rem;gap:.4rem;}
+  .pose-btns{display:none;}
+  #topbar h1{font-size:.82rem;}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>3D Mannequin</h1>
+  <div class="sep"></div>
+
+  <!-- Model selector -->
+  <div class="model-btns">
+    <button class="model-btn active" data-model="xbot" onclick="switchModel('xbot',this)">
+      <span class="icon">♂</span>X Bot
+    </button>
+    <button class="model-btn" data-model="ybot" onclick="switchModel('ybot',this)">
+      <span class="icon">♀</span>Y Bot
+    </button>
+  </div>
+  <div class="sep"></div>
+
+  <!-- Pose buttons -->
+  <div class="pose-btns" id="poseBtns"></div>
+  <div class="sep"></div>
+
+  <!-- Actions -->
+  <div class="act-btns">
+    <button class="act-btn" id="btnLight" onclick="toggleLightPanel()">💡 Light</button>
+    <button class="act-btn" id="btnWire" onclick="toggleWire()">◻ Wire</button>
+    <button class="act-btn" id="btnBg" onclick="toggleBg()">☀ BG</button>
+    <button class="act-btn" id="btnGrid" onclick="toggleGrid()">⊞ Grid</button>
+    <button class="act-btn" onclick="saveSnap()">⬇ Save</button>
+  </div>
+</div>
+
+<div id="main">
+  <canvas id="viewport"></canvas>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="load-msg">Loading model…</div>
+    <div id="load-bar-wrap"><div id="load-bar"></div></div>
+  </div>
+
+  <!-- Hint -->
+  <div id="hint">Drag to rotate · Scroll to zoom · Right-drag to pan</div>
+
+  <!-- Light panel -->
+  <div id="light-panel">
+    <div class="lp-title">Lighting</div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Key light</span><span id="v-key">80%</span></div>
+      <input type="range" id="sl-key" min="0" max="200" value="80" oninput="setLight('key',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Fill light</span><span id="v-fill">40%</span></div>
+      <input type="range" id="sl-fill" min="0" max="200" value="40" oninput="setLight('fill',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Rim light</span><span id="v-rim">60%</span></div>
+      <input type="range" id="sl-rim" min="0" max="200" value="60" oninput="setLight('rim',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Ambient</span><span id="v-amb">30%</span></div>
+      <input type="range" id="sl-amb" min="0" max="100" value="30" oninput="setLight('amb',this.value)">
+    </div>
+    <div class="lp-row">
+      <div class="lp-label"><span>Shadow</span><span id="v-shd">on</span></div>
+      <input type="range" id="sl-shd" min="0" max="1" value="1" step="1" oninput="setLight('shd',this.value)">
+    </div>
+  </div>
+
+  <div id="error-banner"></div>
+</div>
+
+<!-- Three.js + GLTFLoader -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── GLTFLoader inline (r128 compatible) ───────────────────────────────────────
+// We load via a dynamic script tag from CDN
+</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+
+const MODEL_URLS = {
+  xbot: 'https://farbrorjannis.github.io/kroki3dmodell/xbot.glb',
+  ybot: 'https://farbrorjannis.github.io/kroki3dmodell/ybot.glb',
+};
+
+// ── POSES (bone rotations in radians) ────────────────────────────────────────
+const DEG = Math.PI / 180;
+
+// Mixamo bone names
+const B = {
+  hips:       'mixamorigHips',
+  spine:      'mixamorigSpine',
+  spine1:     'mixamorigSpine1',
+  spine2:     'mixamorigSpine2',
+  neck:       'mixamorigNeck',
+  head:       'mixamorigHead',
+  lShoulder:  'mixamorigLeftShoulder',
+  rShoulder:  'mixamorigRightShoulder',
+  lArm:       'mixamorigLeftArm',
+  rArm:       'mixamorigRightArm',
+  lForeArm:   'mixamorigLeftForeArm',
+  rForeArm:   'mixamorigRightForeArm',
+  lHand:      'mixamorigLeftHand',
+  rHand:      'mixamorigRightHand',
+  lUpLeg:     'mixamorigLeftUpLeg',
+  rUpLeg:     'mixamorigRightUpLeg',
+  lLeg:       'mixamorigLeftLeg',
+  rLeg:       'mixamorigRightLeg',
+  lFoot:      'mixamorigLeftFoot',
+  rFoot:      'mixamorigRightFoot',
+};
+
+const POSES = {
+  'T-Pose': {},
+
+  'Standing': {
+    [B.spine]:     {x: 2},
+    [B.spine1]:    {x: 2},
+    [B.lArm]:      {z:-8,  x: 5},
+    [B.rArm]:      {z: 8,  x: 5},
+    [B.lForeArm]:  {y: 10},
+    [B.rForeArm]:  {y:-10},
+    [B.lUpLeg]:    {x: 3,  z: 3},
+    [B.rUpLeg]:    {x: 3,  z:-3},
+  },
+
+  'Sitting': {
+    [B.hips]:      {x:-5},
+    [B.spine]:     {x:-8},
+    [B.lUpLeg]:    {x:-85, z: 5},
+    [B.rUpLeg]:    {x:-85, z:-5},
+    [B.lLeg]:      {x: 85},
+    [B.rLeg]:      {x: 85},
+    [B.lFoot]:     {x:-20},
+    [B.rFoot]:     {x:-20},
+    [B.lArm]:      {z:-15},
+    [B.rArm]:      {z: 15},
+    [B.lForeArm]:  {x:-30},
+    [B.rForeArm]:  {x:-30},
+  },
+
+  'Walking': {
+    [B.hips]:      {y: 8},
+    [B.spine]:     {x: 5, y: 5},
+    [B.lArm]:      {x:-30, z:-10},
+    [B.rArm]:      {x: 35, z: 10},
+    [B.lForeArm]:  {x:-25},
+    [B.rForeArm]:  {x:-35},
+    [B.lUpLeg]:    {x:-35, z: 4},
+    [B.rUpLeg]:    {x: 30, z:-4},
+    [B.lLeg]:      {x: 10},
+    [B.rLeg]:      {x: 22},
+    [B.lFoot]:     {x:-8},
+    [B.rFoot]:     {x: 15},
+  },
+
+  'Running': {
+    [B.hips]:      {x: 10, y: 10},
+    [B.spine]:     {x: 15},
+    [B.spine1]:    {x: 8},
+    [B.lArm]:      {x: 55, z:-12},
+    [B.rArm]:      {x:-55, z: 12},
+    [B.lForeArm]:  {x:-80},
+    [B.rForeArm]:  {x:-70},
+    [B.lUpLeg]:    {x:-65, z: 5},
+    [B.rUpLeg]:    {x: 70, z:-5},
+    [B.lLeg]:      {x: 20},
+    [B.rLeg]:      {x: 80},
+    [B.lFoot]:     {x:-20},
+    [B.rFoot]:     {x: 20},
+  },
+
+  'Arms Up': {
+    [B.spine]:     {x:-5},
+    [B.spine1]:    {x:-5},
+    [B.lArm]:      {x:-90, z:-20},
+    [B.rArm]:      {x:-90, z: 20},
+    [B.lForeArm]:  {x: 10},
+    [B.rForeArm]:  {x: 10},
+    [B.lUpLeg]:    {z: 3},
+    [B.rUpLeg]:    {z:-3},
+    [B.head]:      {x:-15},
+  },
+
+  'Reaching': {
+    [B.hips]:      {y:-12},
+    [B.spine]:     {x: 5, y:-10},
+    [B.spine1]:    {y:-8},
+    [B.lArm]:      {x:-80, z:-65, y:-10},
+    [B.rArm]:      {x: 10, z: 12},
+    [B.lForeArm]:  {x:-15},
+    [B.rForeArm]:  {x:-20},
+    [B.lHand]:     {x:-15},
+    [B.head]:      {x: 8, y:-20},
+    [B.lUpLeg]:    {x:-8, z: 5},
+    [B.rUpLeg]:    {z:-4},
+    [B.lLeg]:      {x: 8},
+  },
+
+  'Crouching': {
+    [B.hips]:      {x:-15},
+    [B.spine]:     {x: 25},
+    [B.spine1]:    {x: 10},
+    [B.lArm]:      {x: 15, z:-20},
+    [B.rArm]:      {x: 15, z: 20},
+    [B.lForeArm]:  {x:-40},
+    [B.rForeArm]:  {x:-40},
+    [B.lUpLeg]:    {x:-75, z: 10},
+    [B.rUpLeg]:    {x:-75, z:-10},
+    [B.lLeg]:      {x:100},
+    [B.rLeg]:      {x:100},
+    [B.lFoot]:     {x:-30},
+    [B.rFoot]:     {x:-30},
+  },
+
+  'Looking Down': {
+    [B.spine]:     {x: 8},
+    [B.spine1]:    {x:12},
+    [B.spine2]:    {x:10},
+    [B.neck]:      {x: 8},
+    [B.head]:      {x:25},
+    [B.lArm]:      {z:-10},
+    [B.rArm]:      {z: 10},
+    [B.lForeArm]:  {x:-15},
+    [B.rForeArm]:  {x:-15},
+    [B.lUpLeg]:    {x: 3, z: 3},
+    [B.rUpLeg]:    {x: 3, z:-3},
+  },
+
+  'Kroki A': {
+    [B.hips]:      {y:-15, x: 5},
+    [B.spine]:     {x: 10, y:-10},
+    [B.spine1]:    {y:-8},
+    [B.neck]:      {y: 10},
+    [B.head]:      {x: 5, y: 15},
+    [B.lArm]:      {x: 20, z:-28},
+    [B.rArm]:      {x:-12, z: 8},
+    [B.lForeArm]:  {x:-45},
+    [B.rForeArm]:  {x:-18},
+    [B.lUpLeg]:    {x:-18, z: 12},
+    [B.rUpLeg]:    {x: 28, z:-6},
+    [B.lLeg]:      {x: 22},
+    [B.rLeg]:      {x: 12},
+    [B.lFoot]:     {x:-10},
+    [B.rFoot]:     {x: 5},
+  },
+
+  'Kroki B': {
+    [B.hips]:      {x: 5, z: 8},
+    [B.spine]:     {x: 8, z: 5},
+    [B.spine1]:    {z: 4},
+    [B.lArm]:      {x:-5, z:-50},
+    [B.rArm]:      {x:-5, z: 8},
+    [B.lForeArm]:  {x:-20},
+    [B.rForeArm]:  {x:-12},
+    [B.lUpLeg]:    {x: 5, z: 25},
+    [B.rUpLeg]:    {x:-8, z:-8},
+    [B.lLeg]:      {x: 5},
+    [B.rLeg]:      {x: 5},
+    [B.lFoot]:     {x: 3},
+    [B.rFoot]:     {x:-5},
+  },
+};
+
+// ── THREE.JS SETUP ────────────────────────────────────────────────────────────
+const canvas = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x151008);
+scene.fog = new THREE.Fog(0x151008, 6, 16);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 30);
+camera.position.set(0, 1.0, 3.8);
+
+// Lights
+const ambLight   = new THREE.AmbientLight(0xffe8cc, 0.30);
+const keyLight   = new THREE.DirectionalLight(0xfff0e0, 0.80);
+const fillLight  = new THREE.DirectionalLight(0xc8d8ff, 0.40);
+const rimLight   = new THREE.DirectionalLight(0xffe0b0, 0.60);
+
+keyLight.position.set(2, 4, 2.5);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.near = 0.5;
+keyLight.shadow.camera.far  = 12;
+keyLight.shadow.camera.left = keyLight.shadow.camera.bottom = -2;
+keyLight.shadow.camera.right = keyLight.shadow.camera.top = 2;
+fillLight.position.set(-2.5, 1.5, -1);
+rimLight.position.set(0.5, 3, -3);
+
+scene.add(ambLight, keyLight, fillLight, rimLight);
+
+// Ground
+const groundMat = new THREE.MeshStandardMaterial({ color:0x0e0904, roughness:0.95, metalness:0 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(6, 24, 0x3d2d1a, 0x261a09);
+grid.position.y = 0.001;
+scene.add(grid);
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let currentModel = null;
+let bones = {};
+let currentPose = 'Standing';
+let wireMode = false;
+let lightBg = false;
+let gridOn = true;
+let currentModelKey = 'xbot';
+
+// ── GLTF LOADER ───────────────────────────────────────────────────────────────
+const loader = new THREE.GLTFLoader();
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 6000);
+}
+
+function loadModel(key) {
+  const url = MODEL_URLS[key];
+  const loadingEl = document.getElementById('loading');
+  const loadMsg   = document.getElementById('load-msg');
+  const loadBar   = document.getElementById('load-bar');
+
+  loadingEl.classList.remove('hidden');
+  loadMsg.textContent = 'Loading ' + key + '…';
+  loadBar.style.width = '0%';
+
+  if (currentModel) {
+    scene.remove(currentModel);
+    currentModel = null;
+    bones = {};
+  }
+
+  loader.load(url,
+    (gltf) => {
+      const model = gltf.scene;
+
+      // Collect bones FIRST, before any transformations
+      model.traverse(child => {
+        if (child.isBone) bones[child.name] = child;
+        if (child.isSkinnedMesh && child.skeleton) {
+          child.skeleton.bones.forEach(b => { bones[b.name] = b; });
+        }
+      });
+
+      // Reset to T-pose so bounding box is accurate
+      Object.values(bones).forEach(b => b.rotation.set(0, 0, 0));
+
+      // Calculate bounding box from MESH ONLY (not bones/skeleton)
+      const meshBox = new THREE.Box3();
+      model.traverse(child => {
+        if (child.isSkinnedMesh || child.isMesh) {
+          const childBox = new THREE.Box3().setFromObject(child);
+          meshBox.union(childBox);
+        }
+      });
+
+      // If meshBox is empty fall back to full model box
+      const box = meshBox.isEmpty()
+        ? new THREE.Box3().setFromObject(model)
+        : meshBox;
+
+      const size = box.getSize(new THREE.Vector3());
+      const scale = 1.75 / size.y;
+      model.scale.setScalar(scale);
+
+      // Center horizontally, feet on ground
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.x = -center.x * scale;
+      model.position.z = -center.z * scale;
+      model.position.y = -box.min.y * scale;
+
+      // Shadows & wireframe state
+      model.traverse(child => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          child.userData._mat = child.material;
+          if (wireMode) child.material = new THREE.MeshBasicMaterial({wireframe:true, color:0x8aaa66});
+        }
+      });
+
+      scene.add(model);
+      currentModel = model;
+      currentModelKey = key;
+
+      // Reset camera to show full body
+      orb = { theta: 0, phi: 0.05, r: 4.5, ty: 0.85 };
+      updateCamera();
+
+      // Apply pose after scene is updated
+      setTimeout(() => {
+        applyPose(currentPose, true);
+        loadingEl.classList.add('hidden');
+      }, 100);
+    },
+    (progress) => {
+      if (progress.total > 0) {
+        const pct = Math.round(progress.loaded / progress.total * 100);
+        loadBar.style.width = pct + '%';
+        loadMsg.textContent = 'Loading ' + key + '… ' + pct + '%';
+      }
+    },
+    (error) => {
+      loadingEl.classList.add('hidden');
+      showError('Could not load model. Check GitHub Pages is active and files are uploaded. (' + error.message + ')');
+      console.error(error);
+    }
+  );
+}
+
+// ── POSE SYSTEM ───────────────────────────────────────────────────────────────
+function setBoneRot(boneName, rx, ry, rz) {
+  const bone = bones[boneName];
+  if (!bone) return;
+  bone.rotation.x = (rx || 0) * DEG;
+  bone.rotation.y = (ry || 0) * DEG;
+  bone.rotation.z = (rz || 0) * DEG;
+}
+
+function resetAllBones() {
+  Object.values(bones).forEach(b => {
+    b.rotation.set(0, 0, 0);
+  });
+}
+
+function applyPose(poseName, updateBtn = true) {
+  currentPose = poseName;
+  resetAllBones();
+  const pose = POSES[poseName] || {};
+  for (const [boneName, rot] of Object.entries(pose)) {
+    setBoneRot(boneName, rot.x || 0, rot.y || 0, rot.z || 0);
+  }
+  if (updateBtn) {
+    document.querySelectorAll('.pose-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.pose === poseName));
+  }
+}
+
+// Build pose buttons
+const poseBtnsEl = document.getElementById('poseBtns');
+Object.keys(POSES).forEach(name => {
+  const btn = document.createElement('button');
+  btn.className = 'pose-btn';
+  btn.textContent = name;
+  btn.dataset.pose = name;
+  btn.onclick = () => applyPose(name);
+  poseBtnsEl.appendChild(btn);
+});
+
+// ── MODEL SWITCHER ────────────────────────────────────────────────────────────
+function switchModel(key, el) {
+  if (key === currentModelKey && currentModel) return;
+  document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  loadModel(key);
+}
+
+// ── ORBIT CAMERA ──────────────────────────────────────────────────────────────
+let orb = { theta:0, phi:0.12, r:3.8, ty:0.85 };
+let drag = { on:false, x:0, y:0, t0:0, p0:0, btn:0 };
+let panStart = { x:0, y:0, tx:0, ty:0 };
+
+function updateCamera() {
+  const x = orb.r * Math.sin(orb.theta) * Math.cos(orb.phi);
+  const y = orb.ty + orb.r * Math.sin(orb.phi);
+  const z = orb.r * Math.cos(orb.theta) * Math.cos(orb.phi);
+  camera.position.set(x, y, z);
+  camera.lookAt(0, orb.ty, 0);
+}
+
+canvas.addEventListener('mousedown', e => {
+  drag = { on:true, x:e.clientX, y:e.clientY, t0:orb.theta, p0:orb.phi, btn:e.button };
+  panStart = { x:e.clientX, y:e.clientY, tx:orb.ty };
+  canvas.classList.add('grabbing');
+  e.preventDefault();
+});
+window.addEventListener('mousemove', e => {
+  if (!drag.on) return;
+  const dx = (e.clientX - drag.x) / canvas.clientWidth;
+  const dy = (e.clientY - drag.y) / canvas.clientHeight;
+  if (drag.btn === 2) {
+    // Right drag = pan
+    orb.ty = panStart.ty + dy * orb.r * 1.5;
+    orb.ty = Math.max(-0.5, Math.min(2.5, orb.ty));
+  } else {
+    orb.theta = drag.t0 - dx * Math.PI * 2;
+    orb.phi   = Math.max(-0.25, Math.min(1.2, drag.p0 + dy * Math.PI));
+  }
+  updateCamera();
+});
+window.addEventListener('mouseup', () => { drag.on = false; canvas.classList.remove('grabbing'); });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  orb.r = Math.max(0.8, Math.min(7, orb.r + e.deltaY * 0.003));
+  updateCamera();
+}, { passive: false });
+
+// Touch
+let touch = { on:false, x:0, y:0, t0:0, p0:0, pinch:0, pr:0 };
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    touch = { on:true, x:e.touches[0].clientX, y:e.touches[0].clientY, t0:orb.theta, p0:orb.phi };
+  } else if (e.touches.length === 2) {
+    const d = touchDist(e);
+    touch = { ...touch, pinch:d, pr:orb.r };
+  }
+  e.preventDefault();
+}, { passive:false });
+
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1 && touch.on) {
+    const dx = (e.touches[0].clientX - touch.x) / canvas.clientWidth;
+    const dy = (e.touches[0].clientY - touch.y) / canvas.clientHeight;
+    orb.theta = touch.t0 - dx * Math.PI * 2;
+    orb.phi   = Math.max(-0.25, Math.min(1.2, touch.p0 + dy * Math.PI));
+    updateCamera();
+  } else if (e.touches.length === 2) {
+    const d = touchDist(e);
+    orb.r = Math.max(0.8, Math.min(7, touch.pr * (touch.pinch / d)));
+    updateCamera();
+  }
+  e.preventDefault();
+}, { passive:false });
+
+canvas.addEventListener('touchend', () => { touch.on = false; });
+function touchDist(e) {
+  const dx = e.touches[0].clientX - e.touches[1].clientX;
+  const dy = e.touches[0].clientY - e.touches[1].clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+// ── ACTIONS ───────────────────────────────────────────────────────────────────
+function toggleLightPanel() {
+  const p = document.getElementById('light-panel');
+  p.classList.toggle('open');
+  document.getElementById('btnLight').classList.toggle('on', p.classList.contains('open'));
+}
+
+function setLight(type, val) {
+  val = parseFloat(val);
+  if (type === 'key')  { keyLight.intensity  = val / 100; document.getElementById('v-key').textContent  = val + '%'; }
+  if (type === 'fill') { fillLight.intensity = val / 100; document.getElementById('v-fill').textContent = val + '%'; }
+  if (type === 'rim')  { rimLight.intensity  = val / 100; document.getElementById('v-rim').textContent  = val + '%'; }
+  if (type === 'amb')  { ambLight.intensity  = val / 100; document.getElementById('v-amb').textContent  = val + '%'; }
+  if (type === 'shd')  {
+    renderer.shadowMap.enabled = val > 0;
+    document.getElementById('v-shd').textContent = val > 0 ? 'on' : 'off';
+    scene.traverse(c => { if (c.material) c.material.needsUpdate = true; });
+  }
+}
+
+function toggleWire() {
+  wireMode = !wireMode;
+  document.getElementById('btnWire').classList.toggle('on', wireMode);
+  if (!currentModel) return;
+  currentModel.traverse(child => {
+    if (!child.isMesh) return;
+    if (wireMode) {
+      child.userData._mat = child.material;
+      child.material = new THREE.MeshBasicMaterial({ wireframe:true, color:0x8aaa66 });
+    } else {
+      if (child.userData._mat) child.material = child.userData._mat;
+    }
+  });
+}
+
+function toggleBg() {
+  lightBg = !lightBg;
+  document.getElementById('btnBg').classList.toggle('on', lightBg);
+  const c = lightBg ? 0xe8e0d4 : 0x151008;
+  scene.background = new THREE.Color(c);
+  scene.fog = new THREE.Fog(c, 8, 18);
+  ground.material.color.set(lightBg ? 0xd4c8bc : 0x0e0904);
+  ambLight.intensity = lightBg ? 0.7 : 0.3;
+}
+
+function toggleGrid() {
+  gridOn = !gridOn;
+  grid.visible = gridOn;
+  document.getElementById('btnGrid').classList.toggle('on', !gridOn);
+}
+
+function saveSnap() {
+  renderer.render(scene, camera);
+  canvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.download = 'mannequin-' + currentModelKey + '-' + currentPose.replace(/\s/g,'-') + '.png';
+    a.href = URL.createObjectURL(blob);
+    a.click();
+  });
+}
+
+// ── RESIZE & RENDER ───────────────────────────────────────────────────────────
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
+new ResizeObserver(resize).observe(canvas);
+resize();
+updateCamera();
+animate();
+
+// Start by loading xbot
+loadModel('xbot');
+
+// Hide hint after 5s
+setTimeout(() => {
+  const h = document.getElementById('hint');
+  h.style.opacity = '0';
+}, 5000);
+
+</script>
+</body>
+</html>
